@@ -1,0 +1,74 @@
+[tool.poetry]
+name = "Battery Hawk"
+version = "0.0.1-dev19"
+description = "Battery Hawk is to use BM* (starting with BM6) BLE battery monitors to monitor batteries in cars and boats, and integrate with alerts as appropriate."
+authors = ["UpDryTwist <tathamg@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/UpDryTwist/battery-hawk"
+documentation = "https://battery-hawk.readthedocs.io/en/latest/"
+keywords = ["battery_hawk"]
+homepage = "https://github.com/UpDryTwist/battery-hawk"
+packages = [ { include = "battery_hawk", from = "src" } ]
+
+[lint.per-file-ignores]
+"tests/*.py" = ["S101", "S603"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "docs", "examples", ".venv", "dist", ".ruff_cache", ".github"]
+
+[tool.creosote]
+venvs = [".venv"]
+paths = ["src", "tests", "utils"]
+deps-file = "pyproject.toml"
+sections = ["tool.poetry.dependencies"]
+
+[tool.codespell]
+ignore-words-list = "Battery Hawk"
+uri-ignore-words-list = "Classess"
+skip = "pyproject.toml,build,dist,.venv,.git,*.png,*.jpg,*.jpeg,*.gif,*.bmp,*.ico,*.svg,*.pyc,*.pyo,*.pyd,*.so,*.dll,*.dylib,*.exe,*.bin,*.hex,*.obj,*.o,*.a,*.lib,*.dll.a,*.db,*.sqlite,*.sqlite3"
+
+[tool.isort]
+profile = "black"
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
+pythonVersion = "3.13"
+# TODO: fix for earlier Python versions
+# Include this if you're feeling you have too much time on your hands
+# typeCheckingMode = "strict"
+
+[tool.poetry.dependencies]
+python = ">=3.13,<4.0"
+bleak = "^1.0.1"
+cryptography = "^42.0.0"
+flask = "^3.1.1"
+flask-cors = "^6.0.1"
+influxdb-client = "^1.49.0"
+pydantic = "^2.11.7"
+pydantic-settings = "^2.10.1"
+updrytwist-updrytwist = "^0.0.42"
+asyncio-mqtt = "^0.16.2"
+watchdog = "^6.0.0"
+jsonschema = "^4.24.0"
+
+[tool.poetry.group.dev.dependencies]
+poetry = "^1.7.1"
+pytest = ">=7.4.3,<9.0.0"
+pre-commit = "^4.0.1"
+ruff = "^0.8.0"
+black = "^24.10.0"
+make = "^0.1.6.post2"
+codespell = "^2.2.6"
+sphinx = ">=7.2.6,<9.0.0"
+sphinx-rtd-theme = "^3.0.2"
+pyright = "^1.1.390"
+pytest-cov = "^6.0.0"
+bump-my-version = "^0.33.0"
+copier = "^9.5.0"
+pytest-asyncio = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

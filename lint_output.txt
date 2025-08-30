@@ -1,0 +1,216 @@
+ruff........................................................................[41mFailed[m
+[2m- hook id: ruff[m
+[2m- exit code: 1[m
+
+src\battery_hawk_driver\base\ble_base.py:155:21: ARG002 Unused method argument: `params`
+    |
+153 |                     self,
+154 |                     command: str,
+155 |                     params: dict | None = None,
+    |                     ^^^^^^ ARG002
+156 |                 ) -> DeviceStatus:
+157 |                     return DeviceStatus(connected=True, last_command=command)
+    |
+
+src\battery_hawk_driver\base\connection.py:14:9: D417 Missing argument description in the docstring for `__init__`: `cleanup_interval`
+   |
+12 |     """Async BLE connection pool manager with connection limiting and queuing."""
+13 |
+14 |     def __init__(self, config_manager: Any, cleanup_interval: float = 5.0) -> None:
+   |         ^^^^^^^^ D417
+15 |         """
+16 |         Initialize BLEConnectionPool with config manager and cleanup interval.
+   |
+
+src\battery_hawk_driver\base\connection.py:14:40: ANN401 Dynamically typed expressions (typing.Any) are disallowed in `config_manager`
+   |
+12 |     """Async BLE connection pool manager with connection limiting and queuing."""
+13 |
+14 |     def __init__(self, config_manager: Any, cleanup_interval: float = 5.0) -> None:
+   |                                        ^^^ ANN401
+15 |         """
+16 |         Initialize BLEConnectionPool with config manager and cleanup interval.
+   |
+
+src\battery_hawk_driver\base\connection.py:42:9: D200 One-line docstring should fit on one line
+   |
+41 |       async def shutdown(self) -> None:
+42 |           """
+   |  _________^
+43 | |         Stop the background cleanup task. Use in tests to avoid pending tasks.
+44 | |         """
+   | |___________^ D200
+45 |           self._shutdown_event.set()
+46 |           if self._cleanup_task:
+   |
+   = help: Reformat to one line
+
+src\battery_hawk_driver\base\connection.py:63:11: TD003 Missing issue link on the line following this TODO
+   |
+61 |     async def _create_connection(self, device_address: str) -> dict:
+62 |         """Actually create a BLE connection (stub for now)."""
+63 |         # TODO(@commit-ready): Integrate with BleakClient or actual BLE connection logic
+   |           ^^^^ TD003
+64 |         # This TODO is a placeholder for a planned feature; see linked issue.
+65 |         # Issue: https://github.com/your-org/your-repo/issues/1
+   |
+
+src\battery_hawk_driver\base\connection.py:63:11: FIX002 Line contains TODO, consider resolving the issue
+   |
+61 |     async def _create_connection(self, device_address: str) -> dict:
+62 |         """Actually create a BLE connection (stub for now)."""
+63 |         # TODO(@commit-ready): Integrate with BleakClient or actual BLE connection logic
+   |           ^^^^ FIX002
+64 |         # This TODO is a placeholder for a planned feature; see linked issue.
+65 |         # Issue: https://github.com/your-org/your-repo/issues/1
+   |
+
+src\battery_hawk_driver\base\connection.py:81:15: TD003 Missing issue link on the line following this TODO
+   |
+79 |         """Disconnect from a BLE device and clean up."""
+80 |         if device_address in self.active_connections:
+81 |             # TODO(@commit-ready): Add actual disconnect logic
+   |               ^^^^ TD003
+82 |             # This TODO is a placeholder for a planned feature; see linked issue.
+83 |             # Issue: https://github.com/your-org/your-repo/issues/2
+   |
+
+src\battery_hawk_driver\base\connection.py:81:15: FIX002 Line contains TODO, consider resolving the issue
+   |
+79 |         """Disconnect from a BLE device and clean up."""
+80 |         if device_address in self.active_connections:
+81 |             # TODO(@commit-ready): Add actual disconnect logic
+   |               ^^^^ FIX002
+82 |             # This TODO is a placeholder for a planned feature; see linked issue.
+83 |             # Issue: https://github.com/your-org/your-repo/issues/2
+   |
+
+src\battery_hawk_driver\base\discovery.py:47:13: TRY300 Consider moving this statement to an `else` block
+   |
+45 |                     }
+46 |             self._save_persistent_devices()
+47 |             return self.discovered_devices
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ TRY300
+48 |         except Exception:
+49 |             self.logger.exception("BLE scan failed")
+   |
+
+src\battery_hawk_driver\base\discovery.py:54:11: TD003 Missing issue link on the line following this TODO
+   |
+52 |     def _is_potential_battery_monitor(self, _device: object) -> bool:
+53 |         """Return True if device matches known battery monitor characteristics."""
+54 |         # TODO(@commit-ready): Implement actual filtering logic based on device name, services, etc.
+   |           ^^^^ TD003
+55 |         # This TODO is a placeholder for a planned feature; see linked issue.
+56 |         # Issue: https://github.com/your-org/your-repo/issues/3
+   |
+
+src\battery_hawk_driver\base\discovery.py:54:11: FIX002 Line contains TODO, consider resolving the issue
+   |
+52 |     def _is_potential_battery_monitor(self, _device: object) -> bool:
+53 |         """Return True if device matches known battery monitor characteristics."""
+54 |         # TODO(@commit-ready): Implement actual filtering logic based on device name, services, etc.
+   |           ^^^^ FIX002
+55 |         # This TODO is a placeholder for a planned feature; see linked issue.
+56 |         # Issue: https://github.com/your-org/your-repo/issues/3
+   |
+
+src\battery_hawk_driver\base\retry.py:86:39: S311 Standard pseudo-random generators are not suitable for cryptographic purposes
+   |
+84 |     # nosec: B311 - Not used for security/cryptography, only for retry jitter
+85 |     # Use of random.random is justified here because this is not a security/cryptography context.
+86 |     jitter_amount = delay * jitter * (random.random() * 2 - 1)  # nosec: B311
+   |                                       ^^^^^^^^^^^^^^^ S311
+87 |     return max(0.0, delay + jitter_amount)
+   |
+
+src\battery_hawk_driver\base\retry.py:119:21: TRY300 Consider moving this statement to an `else` block
+    |
+117 |                     if circuit_breaker:
+118 |                         circuit_breaker.record_success()
+119 |                     return result
+    |                     ^^^^^^^^^^^^^ TRY300
+120 |                 except exceptions as exc:
+121 |                     last_exc = exc
+    |
+
+tests\test_ble_connection_pool.py:89:12: RUF006 Store a reference to the return value of `asyncio.create_task`
+   |
+87 |     assert stats["queued"] == 0
+88 |     # Start the second connection (should queue)
+89 |     fut2 = asyncio.create_task(pool.connect("AA:BB:CC:DD:EE:02"))  # noqa: F841
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ RUF006
+90 |     # Wait until the queue is populated or timeout
+91 |     for _ in range(20):
+   |
+
+tests\test_ble_discovery.py:56:14: ASYNC230 Async functions should not open files with blocking methods like `open`
+   |
+54 |         assert os.path.exists(temp_storage)
+55 |         # Blocking open is acceptable here for test coverage; no async alternative for file reading in this context.
+56 |         with open(temp_storage) as f:
+   |              ^^^^ ASYNC230
+57 |             import json
+   |
+
+tests\test_config_manager.py:32:12: S603 `subprocess` call: check for execution of untrusted input
+   |
+30 |     # subprocess.run is safe here because input is controlled and not untrusted (test context)
+31 |     cmd = [sys.executable, "-m", "battery_hawk", "--config-dir", config_dir]
+32 |     proc = subprocess.run([*cmd, *args], capture_output=True, text=True, check=False)
+   |            ^^^^^^^^^^^^^^ S603
+33 |     return proc.returncode, proc.stdout, proc.stderr
+   |
+
+Found 16 errors.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+
+ruff-format.................................................................[42mPassed[m
+blacken-docs................................................................[42mPassed[m
+Detect hardcoded secrets....................................................[42mPassed[m
+bandit......................................................................[42mPassed[m
+check for added large files.................................................[42mPassed[m
+check python ast............................................................[42mPassed[m
+check builtin type constructor use..........................................[42mPassed[m
+check for case conflicts....................................................[42mPassed[m
+check docstring is first....................................................[42mPassed[m
+check that executables have shebangs........................................[42mPassed[m
+check illegal windows names.............................(no files to check)[46;30mSkipped[m
+check that scripts with shebangs are executable.............................[42mPassed[m
+check for merge conflicts...................................................[42mPassed[m
+check for broken symlinks...............................(no files to check)[46;30mSkipped[m
+check vcs permalinks........................................................[42mPassed[m
+check json..................................................................[42mPassed[m
+check toml..................................................................[42mPassed[m
+check xml...............................................(no files to check)[46;30mSkipped[m
+check yaml..................................................................[42mPassed[m
+debug statements (python)...................................................[42mPassed[m
+detect destroyed symlinks...................................................[42mPassed[m
+detect private key..........................................................[42mPassed[m
+detect private key..........................................................[42mPassed[m
+fix end of files............................................................[42mPassed[m
+pretty format json..........................................................[42mPassed[m
+forbid submodules.......................................(no files to check)[46;30mSkipped[m
+mixed line ending...........................................................[42mPassed[m
+fix requirements.txt....................................(no files to check)[46;30mSkipped[m
+python tests naming.........................................................[42mPassed[m
+trim trailing whitespace....................................................[42mPassed[m
+check blanket noqa..........................................................[42mPassed[m
+check blanket type ignore...................................................[42mPassed[m
+check for not-real mock methods.............................................[42mPassed[m
+check for eval()............................................................[42mPassed[m
+use logger.warning(.........................................................[42mPassed[m
+type annotations not comments...............................................[42mPassed[m
+no unicode replacement chars................................................[42mPassed[m
+yamllint....................................................................[42mPassed[m
+sync-pre-commit-deps........................................................[42mPassed[m
+pyupgrade...................................................................[42mPassed[m
+Add trailing commas.........................................................[42mPassed[m
+codespell...................................................................[42mPassed[m
+pyright.....................................................................[42mPassed[m
+talisman....................................................................[42mPassed[m
+talisman....................................................................[42mPassed[m
+Test shell scripts with shellcheck..........................................[42mPassed[m
+Check for conflict markers and core.whitespace errors.......................[42mPassed[m
+shfmt.......................................................................[42mPassed[m
+PowerShell Script Analyzer..............................(no files to check)[46;30mSkipped[m

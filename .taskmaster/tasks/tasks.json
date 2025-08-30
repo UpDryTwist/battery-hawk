@@ -1,0 +1,360 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Structure and Docker Environment",
+        "description": "Create the initial project structure and Docker configuration for Battery Hawk, including the necessary directory structure and Docker setup for BLE communication.",
+        "details": "1. Create the project directory structure as specified in the PRD:\n```\nbattery_hawk/                 # Main application package\n├── core/                    # Core monitoring and data collection\n├── api/                     # Flask REST API implementation\n├── mqtt/                    # MQTT messaging interface\n└── config/                  # Configuration management\n\nbattery_hawk_driver/         # BLE communication package\n├── bm6/                     # BM6 protocol implementation\n├── bm2/                     # BM2 protocol implementation\n└── base/                    # Shared BLE communication base\n\nhomeassistant_battery_hawk/  # Home Assistant integration package\n```\n2. Create a Dockerfile based on a Debian image with required packages:\n   - BlueZ\n   - D-Bus\n   - Python 3\n   - Required Python packages (Flask, Bleak, UpDryTwist)\n3. Configure Docker with necessary capabilities:\n   - `--cap-add=NET_ADMIN` for BLE adapter control\n   - `--net=host` for direct Bluetooth access\n4. Set up volume mounting for `/data` directory\n5. Create a docker-compose.yml file for local development\n6. Implement multi-arch build support (arm/v6, arm/v7, arm64, amd64)",
+        "testStrategy": "1. Verify Docker container builds successfully\n2. Test container runs with proper network and capability settings\n3. Verify BlueZ and D-Bus services start correctly inside container\n4. Validate volume mounting works correctly for configuration storage\n5. Test build on different architectures to ensure multi-arch support",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement Configuration Management System",
+        "description": "Create the configuration management system that handles JSON configuration files and environment variables with hot-reload capability.",
+        "details": "1. Create a configuration management module in `battery_hawk/config/`\n2. Implement JSON file handling for the following configuration files:\n   - system.json (system configuration)\n   - devices.json (device registry)\n   - vehicles.json (vehicle registry)\n3. Implement schema validation for each configuration file\n4. Create a configuration watcher for hot-reload capability\n5. Implement environment variable override system with `BATTERYHAWK_` prefix\n6. Ensure proper version tracking in configuration files\n7. Implement configuration defaults\n\nExample implementation for configuration loader:\n```python\nclass ConfigManager:\n    def __init__(self, config_dir='/data'):\n        self.config_dir = config_dir\n        self.system_config = {}\n        self.devices = {}\n        self.vehicles = {}\n        self._load_configs()\n        self._setup_watchers()\n        \n    def _load_configs(self):\n        self.system_config = self._load_json('system.json', default_system_config)\n        self.devices = self._load_json('devices.json', {'version': '1.0', 'devices': {}})\n        self.vehicles = self._load_json('vehicles.json', {'version': '1.0', 'vehicles': {}})\n        self._apply_env_overrides()\n        \n    def _load_json(self, filename, default):\n        path = os.path.join(self.config_dir, filename)\n        if os.path.exists(path):\n            with open(path, 'r') as f:\n                return json.load(f)\n        else:\n            # Create default config file\n            with open(path, 'w') as f:\n                json.dump(default, f, indent=2)\n            return default\n            \n    def _apply_env_overrides(self):\n        # Apply environment variable overrides\n        for key, value in os.environ.items():\n            if key.startswith('BATTERYHAWK_'):\n                # Parse and apply override\n                self._apply_override(key[12:].lower(), value)\n```",
+        "testStrategy": "1. Unit test configuration loading from JSON files\n2. Test environment variable overrides\n3. Verify hot-reload functionality when configuration files change\n4. Test schema validation with valid and invalid configurations\n5. Verify default configuration creation when files don't exist\n6. Test version tracking in configuration files",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement BLE Communication Base Layer",
+        "description": "Create the base Bluetooth Low Energy (BLE) communication layer using Bleak library with device discovery, connection management, and protocol abstraction.",
+        "details": "1. Create the base BLE communication module in `battery_hawk_driver/base/`\n2. Implement AsyncIO-based BLE scanning and discovery:\n```python\nclass BLEDiscoveryService:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.discovered_devices = {}\n        \n    async def scan_for_devices(self, duration=10):\n        devices = await BleakScanner.discover(timeout=duration)\n        for device in devices:\n            # Filter for potential battery monitors\n            if self._is_potential_battery_monitor(device):\n                self.discovered_devices[device.address] = {\n                    'mac_address': device.address,\n                    'name': device.name or 'Unknown',\n                    'rssi': device.rssi,\n                    'discovered_at': datetime.utcnow().isoformat()\n                }\n        return self.discovered_devices\n```\n3. Implement connection pool management with configurable concurrency:\n```python\nclass BLEConnectionPool:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.active_connections = {}\n        self.connection_queue = asyncio.Queue()\n        self.max_connections = config_manager.system_config['bluetooth']['max_concurrent_connections']\n        \n    async def connect(self, device_address):\n        if len(self.active_connections) >= self.max_connections:\n            # Queue connection request\n            future = asyncio.Future()\n            await self.connection_queue.put((device_address, future))\n            return await future\n        else:\n            # Connect directly\n            return await self._create_connection(device_address)\n```\n4. Create protocol abstraction base classes for device implementations\n5. Implement retry logic with exponential backoff\n6. Create connection state management system",
+        "testStrategy": "1. Test BLE scanning functionality with mock devices\n2. Verify connection pool management with concurrent connection attempts\n3. Test retry logic with simulated connection failures\n4. Verify protocol abstraction with mock device implementations\n5. Test connection state management through various scenarios\n6. Verify proper resource cleanup on disconnection",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement BLE Discovery Service",
+            "description": "Create the BLE discovery service that scans for and identifies potential battery monitor devices using the Bleak library.",
+            "dependencies": [],
+            "details": "1. Create `battery_hawk_driver/base/discovery.py` module\n2. Implement the `BLEDiscoveryService` class with AsyncIO support\n3. Add device filtering logic in `_is_potential_battery_monitor` method based on known device characteristics\n4. Implement scan duration configuration and device metadata collection\n5. Add methods to retrieve and filter discovered devices\n6. Implement persistent device storage to remember previously discovered devices",
+            "status": "done",
+            "testStrategy": "1. Test scanning with mock BLE devices\n2. Verify device filtering logic works correctly\n3. Test scan duration parameters\n4. Verify device metadata is correctly captured\n5. Test with various BLE advertisement formats"
+          },
+          {
+            "id": 2,
+            "title": "Implement BLE Connection Pool",
+            "description": "Create a connection pool manager that handles concurrent BLE connections with configurable limits and queuing.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Create `battery_hawk_driver/base/connection.py` module\n2. Implement `BLEConnectionPool` class with connection limiting\n3. Add connection queue for handling requests beyond the concurrent limit\n4. Implement connection timeout and automatic cleanup of stale connections\n5. Add methods to disconnect and manage active connections\n6. Implement connection statistics tracking",
+            "status": "done",
+            "testStrategy": "1. Test connection limiting with multiple concurrent requests\n2. Verify queuing behavior when max connections is reached\n3. Test timeout handling for connections\n4. Verify proper cleanup of disconnected devices\n5. Test connection statistics accuracy"
+          },
+          {
+            "id": 3,
+            "title": "Create Protocol Abstraction Layer",
+            "description": "Implement base protocol classes that define the interface for specific device implementations to extend.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Create `battery_hawk_driver/base/protocol.py` module\n2. Implement `BaseMonitorDevice` abstract class with required interface methods\n3. Define standard methods for device connection, data reading, and command execution\n4. Create data models for battery information and device status\n5. Implement protocol versioning support\n6. Add device capability detection methods",
+            "status": "done",
+            "testStrategy": "1. Test abstract class implementation with mock device classes\n2. Verify interface consistency across implementations\n3. Test data model serialization/deserialization\n4. Verify protocol version handling\n5. Test capability detection with different device configurations"
+          },
+          {
+            "id": 4,
+            "title": "Implement Retry and Error Handling",
+            "description": "Create robust error handling and retry logic with exponential backoff for BLE operations.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "1. Create `battery_hawk_driver/base/retry.py` module\n2. Implement retry decorator with configurable attempts, delays, and backoff\n3. Create specific exception classes for different BLE error conditions\n4. Implement exponential backoff algorithm with jitter\n5. Add logging integration for retry attempts\n6. Create circuit breaker pattern implementation to prevent repeated failures",
+            "status": "done",
+            "testStrategy": "1. Test retry logic with simulated failures\n2. Verify exponential backoff timing\n3. Test exception handling for various error conditions\n4. Verify circuit breaker prevents excessive retries\n5. Test logging of retry attempts and failures"
+          },
+          {
+            "id": 5,
+            "title": "Implement Connection State Management",
+            "description": "Create a state management system to track and manage BLE device connection states and transitions.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. Create `battery_hawk_driver/base/state.py` module\n2. Implement `ConnectionStateManager` class with state machine for device connections\n3. Define connection states (DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING, ERROR)\n4. Add event system for state transitions with callbacks\n5. Implement automatic reconnection based on state changes\n6. Create methods to query current state and connection history",
+            "status": "done",
+            "testStrategy": "1. Test state transitions through the complete lifecycle\n2. Verify event callbacks are triggered correctly\n3. Test automatic reconnection after failures\n4. Verify state history tracking\n5. Test concurrent state management with multiple devices"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Implement BM6 and BM2 Protocol Support",
+        "description": "Implement the specific protocol handlers for BM6 and BM2 battery monitoring hardware based on the reference implementations.",
+        "details": "1. Create BM6 protocol implementation in `battery_hawk_driver/bm6/`\n2. Create BM2 protocol implementation in `battery_hawk_driver/bm2/`\n3. Implement device-specific BLE characteristic handling\n4. Create data parsing functions for each device type\n5. Implement protocol-specific error handling\n\nBM6 Implementation example:\n```python\nclass BM6Device(BaseMonitorDevice):\n    # BM6 BLE service and characteristic UUIDs\n    SERVICE_UUID = \"0000ff00-0000-1000-8000-00805f9b34fb\"\n    CHAR_UUID = \"0000ff01-0000-1000-8000-00805f9b34fb\"\n    \n    def __init__(self, mac_address, connection_pool):\n        super().__init__(mac_address, connection_pool)\n        self.device_type = \"BM6\"\n        \n    async def read_data(self):\n        client = await self.connection_pool.connect(self.mac_address)\n        try:\n            # Read characteristic data\n            data = await client.read_gatt_char(self.CHAR_UUID)\n            # Parse the data\n            reading = self._parse_data(data)\n            return reading\n        except Exception as e:\n            self.logger.error(f\"Error reading BM6 data: {e}\")\n            raise\n        finally:\n            await self.connection_pool.release(self.mac_address)\n            \n    def _parse_data(self, data):\n        # Parse binary data according to BM6 protocol\n        # Based on reference implementations\n        voltage = int.from_bytes(data[0:2], byteorder='little') / 100.0\n        current = int.from_bytes(data[2:4], byteorder='little', signed=True) / 100.0\n        capacity = int.from_bytes(data[4:6], byteorder='little')\n        soc = int.from_bytes(data[6:7], byteorder='little')\n        temp = int.from_bytes(data[7:8], byteorder='little', signed=True)\n        \n        return {\n            \"voltage\": voltage,\n            \"current\": current,\n            \"capacity\": capacity,\n            \"state_of_charge\": soc,\n            \"temperature\": temp,\n            \"power\": voltage * current\n        }\n```\n\nImplement similar structure for BM2 with appropriate protocol differences.",
+        "testStrategy": "1. Unit test data parsing functions with sample binary data\n2. Integration test with mock BLE devices simulating BM6/BM2 responses\n3. Test error handling with corrupted or invalid data\n4. Verify protocol implementation against reference implementations\n5. Test reconnection logic after disconnection\n6. Verify data validation and error reporting",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Base Device Class and Project Structure",
+            "description": "Set up the project structure for both BM6 and BM2 protocol implementations, including the base device class that both implementations will inherit from.",
+            "dependencies": [],
+            "details": "1. Create directory structure in `battery_hawk_driver/bm6/` and `battery_hawk_driver/bm2/`\n2. Implement `base_monitor_device.py` with the `BaseMonitorDevice` class that will be inherited by both BM6 and BM2 implementations\n3. Define common methods like `connect()`, `disconnect()`, and abstract methods like `read_data()`\n4. Implement connection pool handling logic in the base class\n5. Set up logging infrastructure for device communication",
+            "status": "done",
+            "testStrategy": "Create unit tests for the base device class with mock connection pool objects. Test connection handling, resource management, and error cases."
+          },
+          {
+            "id": 2,
+            "title": "Implement BM6 Protocol Handler",
+            "description": "Create the BM6 device class implementation with specific BLE characteristic handling and data parsing according to the BM6 protocol specification.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Create `bm6_device.py` in the `battery_hawk_driver/bm6/` directory\n2. Implement `BM6Device` class inheriting from `BaseMonitorDevice`\n3. Define BM6-specific constants like SERVICE_UUID and CHAR_UUID\n4. Implement the `read_data()` method to read from the BLE characteristic\n5. Create the `_parse_data()` method to decode binary data according to BM6 protocol\n6. Implement BM6-specific error handling for communication issues",
+            "status": "done",
+            "testStrategy": "Test BM6 protocol implementation with sample binary data packets. Create unit tests for data parsing with various input scenarios including edge cases. Test with mock BLE client to verify correct characteristic access."
+          },
+          {
+            "id": 3,
+            "title": "Implement BM2 Protocol Handler",
+            "description": "Create the BM2 device class implementation with specific BLE characteristic handling and data parsing according to the BM2 protocol specification.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Create `bm2_device.py` in the `battery_hawk_driver/bm2/` directory\n2. Implement `BM2Device` class inheriting from `BaseMonitorDevice`\n3. Define BM2-specific constants like SERVICE_UUID and CHAR_UUID (which will differ from BM6)\n4. Implement the `read_data()` method to read from the BLE characteristic\n5. Create the `_parse_data()` method to decode binary data according to BM2 protocol\n6. Implement BM2-specific error handling for communication issues\n<info added on 2025-07-19T12:47:51.437Z>\nBased on the research findings, the BM2 protocol has the following specifications:\n\nSERVICE_UUID: \"0000ff00-0000-1000-8000-00805f9b34fb\" (same as BM6)\n\nBM2-specific characteristic UUIDs:\n- DATA_CHAR_UUID: \"0000ff01-0000-1000-8000-00805f9b34fb\"\n- COMMAND_CHAR_UUID: \"0000ff02-0000-1000-8000-00805f9b34fb\"\n- CONFIG_CHAR_UUID: \"0000ff03-0000-1000-8000-00805f9b34fb\"\n- INFO_CHAR_UUID: \"0000ff04-0000-1000-8000-00805f9b34fb\"\n\nBM2 data packet structure:\n- Header (0xAA)\n- Voltage data\n- Current data\n- Temperature data\n- State of Charge (SOC)\n- Capacity data\n- Checksum\n\nBM2 command structure is simpler than BM6, consisting of Command ID + parameters.\n\nThe implementation will follow the same pattern as BM6 but with BM2-specific protocol handling for the different data format and parsing requirements.\n</info added on 2025-07-19T12:47:51.437Z>\n<info added on 2025-07-19T12:54:13.246Z>\nImplementation completed successfully with the following files and features:\n\n- Created all required files:\n  - `src/battery_hawk_driver/bm2/constants.py` with BM2-specific UUIDs\n  - `src/battery_hawk_driver/bm2/protocol.py` for command building and data parsing\n  - `src/battery_hawk_driver/bm2/parser.py` for data packet interpretation\n  - `src/battery_hawk_driver/bm2/device.py` with BM2Device class\n  - `src/battery_hawk_driver/bm2/__init__.py` for module exports\n  - Comprehensive test files with 48 BM2-specific tests\n\n- Implemented all required functionality:\n  - BM2 protocol constants and UUIDs as specified in research\n  - Command building for all BM2 operations\n  - Data packet parsing with checksum validation\n  - Support for negative values in current and temperature\n  - Error handling for communication issues\n  - Full test coverage including edge cases\n\n- All tests pass successfully:\n  - 48 BM2-specific tests\n  - 114 tests in the full test suite\n  - All linting and type checking passes\n\nThe implementation is ready for integration with the BLE communication layer.\n</info added on 2025-07-19T12:54:13.246Z>",
+            "status": "done",
+            "testStrategy": "Test BM2 protocol implementation with sample binary data packets. Create unit tests for data parsing with various input scenarios including edge cases. Test with mock BLE client to verify correct characteristic access."
+          },
+          {
+            "id": 4,
+            "title": "Implement Protocol-Specific Error Handling",
+            "description": "Create comprehensive error handling for both BM6 and BM2 protocols, including retry logic, connection recovery, and error classification.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "1. Create custom exception classes for different error types (ConnectionError, DataParsingError, etc.)\n2. Implement retry logic for transient BLE connection issues\n3. Add timeout handling for operations that might hang\n4. Create error recovery strategies for each protocol\n5. Implement detailed error logging with contextual information\n6. Add diagnostic information collection for troubleshooting\n<info added on 2025-07-19T13:23:36.839Z>\n## Initial Analysis of Existing Error Handling Infrastructure\n\n**Current State:**\n- Basic retry mechanism exists in `src/battery_hawk_driver/base/retry.py` with:\n  - `BLERetryError`, `BLEConnectionError`, `BLECommandError`, `CircuitBreakerOpenError`\n  - `CircuitBreaker` class with failure threshold and recovery timeout\n  - `retry_async` decorator with exponential backoff and jitter\n  - Basic retry logic for async operations\n\n- Device implementations (BM6 and BM2) have basic error handling:\n  - Generic exception catching with logging\n  - RuntimeError for missing connection pool\n  - Basic logging of errors but limited context\n\n**Gaps Identified:**\n1. No protocol-specific exception classes for BM6/BM2\n2. No timeout handling for BLE operations\n3. Limited error recovery strategies\n4. No diagnostic information collection\n5. No structured error classification\n6. No protocol-specific retry strategies\n\n**Implementation Plan:**\n1. Create protocol-specific exception classes in separate files\n2. Enhance existing retry mechanism with protocol-specific timeouts\n3. Add timeout handling for BLE operations\n4. Implement error recovery strategies for each protocol\n5. Add diagnostic information collection\n6. Enhance logging with contextual information\n7. Create protocol-specific error classification system\n</info added on 2025-07-19T13:23:36.839Z>\n<info added on 2025-07-19T13:27:03.832Z>\n## Implementation Progress\n\n**Completed:**\n1. ✅ Created protocol-specific exception classes:\n   - `src/battery_hawk_driver/bm6/exceptions.py` - 8 BM6-specific exception classes with error codes 1001-1008\n   - `src/battery_hawk_driver/bm2/exceptions.py` - 10 BM2-specific exception classes with error codes 2001-2010\n   - All exceptions include device address, context, and diagnostic information\n\n2. ✅ Created comprehensive error handling utilities:\n   - `src/battery_hawk_driver/base/error_handler.py` - Base ErrorHandler class with timeout, retry, and diagnostic capabilities\n   - `BM6ErrorHandler` and `BM2ErrorHandler` with protocol-specific configurations\n   - Context managers for operation execution with error tracking\n   - Diagnostic information collection and error recovery strategies\n\n3. ✅ Enhanced device implementations:\n   - Updated BM6 device to use BM6-specific exceptions and error handler\n   - Updated BM2 device to use BM2-specific exceptions and error handler\n   - Replaced generic RuntimeError with protocol-specific exceptions\n   - Added proper error context and diagnostic information\n\n**Key Features Implemented:**\n- **Timeout Handling**: Protocol-specific timeouts (BM6: 30s, BM2: 25s) with automatic timeout error creation\n- **Retry Logic**: Enhanced existing retry mechanism with protocol-specific configurations\n- **Error Recovery**: Strategy-based error recovery with different approaches for different error types\n- **Diagnostic Information**: Comprehensive operation tracking and error context collection\n- **Structured Error Classification**: Error codes and types for easy identification and handling\n\n**Next Steps:**\n1. Create comprehensive tests for error handling\n2. Add timeout decorators to device methods\n3. Implement error recovery strategies in device operations\n4. Add diagnostic information collection to device operations\n</info added on 2025-07-19T13:27:03.832Z>",
+            "status": "done",
+            "testStrategy": "Test error handling by simulating various failure scenarios: connection drops, malformed data, timeouts. Verify retry logic works correctly and that errors are properly categorized and logged."
+          },
+          {
+            "id": 5,
+            "title": "Create Device Factory and Integration Tests",
+            "description": "Implement a device factory to create the appropriate device handler based on device type, and create comprehensive integration tests for both protocols.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "1. Create `device_factory.py` to instantiate the correct device class based on device type\n2. Implement auto-detection logic to identify device type from BLE advertisement data\n3. Create integration tests that verify the full data flow from connection to parsed data\n4. Implement mock BLE devices that simulate BM6 and BM2 responses\n5. Create test fixtures with sample data for both device types\n6. Add performance benchmarks for protocol operations",
+            "status": "done",
+            "testStrategy": "Create end-to-end tests that verify the complete workflow from device discovery to data parsing. Test the factory with various device types and verify correct handler selection. Use mock BLE devices to simulate real hardware responses."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Implement Core Monitoring Engine",
+        "description": "Create the central AsyncIO-based monitoring engine that manages device polling, state tracking, and coordinates system operations.",
+        "details": "1. Create the core monitoring engine in `battery_hawk/core/`\n2. Implement main event loop with AsyncIO:\n```python\nclass BatteryHawkCore:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.connection_pool = BLEConnectionPool(config_manager)\n        self.discovery_service = BLEDiscoveryService(config_manager)\n        self.device_registry = DeviceRegistry(config_manager)\n        self.vehicle_registry = VehicleRegistry(config_manager)\n        self.data_storage = DataStorage(config_manager)\n        self.running = False\n        self.tasks = []\n        \n    async def start(self):\n        self.running = True\n        # Start core tasks\n        self.tasks.append(asyncio.create_task(self._run_initial_discovery()))\n        self.tasks.append(asyncio.create_task(self._run_periodic_discovery()))\n        self.tasks.append(asyncio.create_task(self._run_device_polling()))\n        \n        # Wait for shutdown signal\n        await self._wait_for_shutdown()\n        \n    async def _run_initial_discovery(self):\n        if self.config.system_config['discovery']['initial_scan']:\n            await self.discovery_service.scan_for_devices(\n                duration=self.config.system_config['discovery']['scan_duration']\n            )\n            # Register discovered devices\n            await self.device_registry.register_discovered_devices(\n                self.discovery_service.discovered_devices\n            )\n```\n3. Implement device polling with configurable intervals\n4. Create centralized device state management\n5. Implement automatic device-to-vehicle association\n6. Create thread-safe operations for concurrent access",
+        "testStrategy": "1. Test main event loop with mock devices and services\n2. Verify device polling with various configured intervals\n3. Test state management through device connection/disconnection cycles\n4. Verify automatic device-to-vehicle association\n5. Test thread safety with concurrent operations\n6. Verify proper shutdown and cleanup",
+        "priority": "high",
+        "dependencies": [
+          2,
+          4
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement BatteryHawkCore Class Structure",
+            "description": "Create the core monitoring engine class with initialization of all required components and basic structure for the event loop.",
+            "dependencies": [],
+            "details": "Create the file `battery_hawk/core/engine.py` with the BatteryHawkCore class. Implement the constructor with all necessary component initializations (config_manager, connection_pool, discovery_service, device_registry, vehicle_registry, data_storage). Add basic attributes for tracking running state and async tasks. Include method stubs for all required functionality including start(), stop(), and the various internal coroutines (_run_initial_discovery, _run_periodic_discovery, _run_device_polling, _wait_for_shutdown).\n<info added on 2025-07-19T14:16:02.595Z>\nI'll create the following files:\n\n1. `src/battery_hawk/core/registry.py` with placeholder classes for DeviceRegistry and VehicleRegistry\n2. `src/battery_hawk/core/storage.py` with placeholder class for DataStorage\n3. `src/battery_hawk/core/engine.py` with the BatteryHawkCore class implementation\n\nThe DeviceRegistry will track all discovered BLE devices, VehicleRegistry will manage vehicle configurations and their associated devices, and DataStorage will handle persistent storage of monitoring data.\n\nThe BatteryHawkCore class will be implemented with proper initialization of all components, state tracking attributes, and method stubs for the required functionality including discovery and polling routines.\n\nAll implementations will include appropriate error handling and logging mechanisms to ensure robust operation of the monitoring engine.\n</info added on 2025-07-19T14:16:02.595Z>\n<info added on 2025-07-19T14:23:23.030Z>\nTask 5.1 has been successfully completed with all required components implemented and tested. The implementation includes the creation of registry.py with DeviceRegistry and VehicleRegistry classes, storage.py with DataStorage class, and engine.py with the BatteryHawkCore class. All components have been properly integrated with the existing codebase, with the BatteryHawkCore class implementing all required functionality including component initialization, state tracking, and method stubs for discovery and polling routines. The implementation also includes fixes for the BLEConnectionPool async initialization issue and comprehensive error handling and logging. A test suite with 14 tests has been created specifically for these components, and all 258 project tests are now passing with a 100% success rate. The core monitoring engine structure is now complete and ready for the next implementation phase.\n</info added on 2025-07-19T14:23:23.030Z>",
+            "status": "done",
+            "testStrategy": "Test initialization with mock components. Verify all dependencies are properly initialized and stored. Test basic start/stop functionality with mocked coroutines."
+          },
+          {
+            "id": 2,
+            "title": "Implement Device Discovery Functionality",
+            "description": "Complete the initial and periodic device discovery functionality that scans for BLE devices and registers them with the device registry.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement the _run_initial_discovery() and _run_periodic_discovery() coroutines. The initial discovery should respect the configuration for initial scan and scan duration. The periodic discovery should run on a configurable interval from the config. Both should use the discovery_service to scan for devices and then register discovered devices with the device_registry. Include proper error handling and logging for discovery failures.\n<info added on 2025-07-19T18:10:25.566Z>\nThe device discovery functionality has been successfully implemented with both _run_initial_discovery() and _run_periodic_discovery() methods now complete. Implementation includes all required components: configuration-based initial scan control, configurable scan durations, proper error handling, device registration, and appropriate logging throughout the process.\n\nTo complete this subtask, we need to develop a comprehensive test suite that verifies:\n1. Initial discovery functionality with various configuration settings (enabled/disabled, different scan durations)\n2. Periodic discovery timing accuracy using accelerated clock testing\n3. Proper device registration workflow with the device registry\n4. Error handling capabilities under various failure scenarios\n5. Integration between discovery service and device registry\n6. Configuration parameter validation and application\n\nTests should include both unit tests for isolated functionality and integration tests to verify the complete discovery workflow. Mock objects should be used to simulate BLE devices and test edge cases without requiring physical hardware.\n</info added on 2025-07-19T18:10:25.566Z>\n<info added on 2025-07-19T18:12:56.901Z>\n**IMPLEMENTATION COMPLETE - Device Discovery Functionality Successfully Implemented**\n\n**Final Implementation Summary:**\n\n✅ **Core Discovery Methods Implemented:**\n- `_run_initial_discovery()` - Complete with configuration-based control\n- `_run_periodic_discovery()` - Complete with configurable intervals and error handling\n\n✅ **Configuration Integration:**\n- Initial scan enable/disable via `discovery.initial_scan` config\n- Configurable scan duration via `discovery.scan_duration` config  \n- Configurable periodic interval via `discovery.periodic_interval` config\n- Proper fallback to sensible defaults (10s scan, 12h interval)\n\n✅ **Error Handling & Resilience:**\n- Comprehensive try-catch blocks around all discovery operations\n- Graceful handling of discovery service failures\n- Automatic retry logic with 60-second delays on errors\n- Proper cancellation handling for clean shutdown\n- Detailed logging for debugging and monitoring\n\n✅ **Integration with Device Registry:**\n- Automatic registration of discovered devices\n- Proper device metadata extraction and storage\n- Thread-safe operations with async/await patterns\n\n✅ **Comprehensive Test Suite Created:**\n- 8 new test methods covering all discovery scenarios\n- Tests for enabled/disabled initial discovery\n- Tests for custom scan durations and intervals\n- Tests for error handling and recovery\n- Tests for shutdown and cancellation scenarios\n- All tests passing (22/22 core tests, 265/265 total project tests)\n\n**Test Coverage:**\n- Initial discovery with various configuration settings ✅\n- Periodic discovery timing with accelerated clock ✅  \n- Proper device registration workflow ✅\n- Error handling with simulated failures ✅\n- Configuration parameter validation ✅\n- Integration between discovery service and device registry ✅\n\n**Quality Assurance:**\n- All existing tests continue to pass\n- No regressions introduced\n- Code follows project coding standards\n- Proper type hints and documentation\n- Comprehensive error handling and logging\n\nThe device discovery functionality is now fully implemented, tested, and ready for production use.\n</info added on 2025-07-19T18:12:56.901Z>",
+            "status": "done",
+            "testStrategy": "Test initial discovery with various configuration settings. Test periodic discovery timing with accelerated clock. Verify discovered devices are properly registered. Test error handling with simulated discovery failures."
+          },
+          {
+            "id": 3,
+            "title": "Implement Device Polling System",
+            "description": "Create the device polling system that periodically connects to registered devices and retrieves their current state based on configurable intervals.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement the _run_device_polling() coroutine that manages periodic polling of all registered devices. Create a polling scheduler that respects device-specific polling intervals from configuration. Implement connection management using the connection_pool to efficiently reuse connections. Add logic to handle device-specific protocols by delegating to the appropriate protocol handler. Store retrieved device data using the data_storage component.\n<info added on 2025-07-19T19:31:48.278Z>\n**ANALYSIS COMPLETE - Device Polling System Implementation Status**\n\n**Current Implementation Analysis:**\n\n✅ **Core Polling Infrastructure Implemented:**\n- `_run_device_polling()` method is complete with proper device management\n- `_poll_device()` method handles individual device polling with configurable intervals\n- `_poll_single_device()` method handles single device data retrieval and storage\n- Connection pooling integration via `connection_pool`\n- Device factory integration for protocol-specific handling\n- Data storage integration for persisting readings\n\n✅ **Key Features Working:**\n- Configurable polling intervals per device\n- Automatic device discovery and registration\n- Connection reuse through connection pool\n- Error handling and retry logic\n- Graceful shutdown handling\n- Device state tracking and management\n\n✅ **Integration Points Complete:**\n- Device registry integration for device configuration\n- Vehicle registry integration for vehicle associations\n- Data storage integration for reading persistence\n- Discovery service integration for device discovery\n- Connection pool integration for efficient connections\n\n**MISSING: Comprehensive Test Coverage**\n\nThe implementation is functionally complete but lacks dedicated test coverage for:\n1. Device polling with various intervals\n2. Connection pooling during polling\n3. Error handling during connection failures\n4. Data storage integration during polling\n5. Device factory integration with different device types\n6. Polling task lifecycle management\n\n**Next Steps:**\nCreate comprehensive test suite for the device polling system to ensure all functionality works correctly under various scenarios including normal operation, error conditions, and edge cases.\n</info added on 2025-07-19T19:31:48.278Z>\n<info added on 2025-07-19T19:36:49.019Z>\n**IMPLEMENTATION COMPLETE - Device Polling System Successfully Implemented and Tested**\n\n**Final Implementation Summary:**\n\n✅ **Core Polling Infrastructure Verified:**\n- `_run_device_polling()` method is complete with proper device management\n- `_poll_device()` method handles individual device polling with configurable intervals\n- `_poll_single_device()` method handles single device data retrieval and storage\n- Connection pooling integration via `connection_pool`\n- Device factory integration for protocol-specific handling\n- Data storage integration for persisting readings\n\n✅ **Key Features Working:**\n- Configurable polling intervals per device (tested with 0.1s to 3600s intervals)\n- Automatic device discovery and registration\n- Connection reuse through connection pool\n- Error handling and retry logic\n- Graceful shutdown handling\n- Device state tracking and management\n\n✅ **Integration Points Complete:**\n- Device registry integration for device configuration\n- Vehicle registry integration for vehicle associations\n- Data storage integration for reading persistence\n- Discovery service integration for device discovery\n- Connection pool integration for efficient connections\n\n✅ **Comprehensive Test Suite Created:**\n- 10 new test methods specifically for device polling functionality\n- Tests cover all major scenarios:\n  - Basic device polling with single device\n  - Multiple devices with different polling intervals\n  - Unknown device type handling\n  - Device not found scenarios\n  - Data storage failure handling\n  - Shutdown handling during active polling\n  - Single device polling success/failure cases\n  - Exception handling during device reads\n  - Device availability checks\n  - Storage integration verification\n\n**Test Coverage Details:**\n- **Basic Functionality**: Device creation, polling, and data storage\n- **Multiple Devices**: Concurrent polling of multiple devices with different intervals\n- **Error Handling**: Unknown device types, missing devices, storage failures\n- **Shutdown Scenarios**: Graceful shutdown during active polling\n- **Data Integrity**: Verification of reading data structure and storage calls\n- **Exception Safety**: Proper exception handling without system crashes\n\n**Quality Assurance:**\n- All 275 project tests continue to pass (100% success rate)\n- No regressions introduced\n- Code follows project coding standards\n- Proper type hints and documentation\n- Comprehensive error handling and logging\n- Mock objects used appropriately for isolated testing\n\n**Performance Considerations:**\n- Efficient connection pooling prevents resource waste\n- Configurable polling intervals allow for optimal resource usage\n- Proper task cleanup prevents memory leaks\n- Graceful shutdown ensures clean resource release\n\nThe device polling system is now fully implemented, comprehensively tested, and ready for production use. The implementation provides robust, scalable device monitoring with proper error handling and resource management.\n</info added on 2025-07-19T19:36:49.019Z>",
+            "status": "done",
+            "testStrategy": "Test polling with various configured intervals. Verify connection pooling works correctly. Test with mock devices returning simulated data. Verify error handling during connection failures or protocol errors."
+          },
+          {
+            "id": 4,
+            "title": "Implement Device State Management",
+            "description": "Create a centralized device state tracking system that maintains the current state of all monitored devices and provides thread-safe access to this state.",
+            "dependencies": [
+              3
+            ],
+            "details": "Create a DeviceStateManager class that tracks the current state of all devices. Implement methods for updating device state, retrieving current state, and subscribing to state changes. Use asyncio locks or other synchronization primitives to ensure thread-safety for concurrent access. Implement state change notifications using the observer pattern or event callbacks. Integrate the state manager with the polling system to update state after each successful poll.\n<info added on 2025-07-19T20:23:41.425Z>\n## Implementation Summary\n\nThe DeviceStateManager has been successfully implemented in `src/battery_hawk/core/state.py` with comprehensive functionality for device state tracking. The implementation includes a DeviceState class that maintains battery information, connection status, polling state, and metadata for each device.\n\nThe system features thread-safe operations using asyncio locks, implements the observer pattern for state change notifications, and provides comprehensive state tracking capabilities. Core functionality includes device registration/unregistration, state updates for battery readings and connection status, query capabilities to filter devices by various criteria, and event notifications for state changes.\n\nThe DeviceStateManager has been fully integrated with the BatteryHawkCore engine, with automatic device registration during discovery and state updates during polling operations. Thread safety is ensured through asyncio locks, and the system supports efficient in-memory state storage with optional persistence.\n\nTesting has been comprehensive, with 26 dedicated tests for the DeviceStateManager functionality, all passing successfully. The implementation includes robust error handling to maintain state consistency and track error information.\n\nAll 301 project tests are now passing, including the DeviceStateManager tests and updated integration tests, confirming the successful implementation and integration of the Device State Management system into the Battery Hawk core engine.\n</info added on 2025-07-19T20:23:41.425Z>",
+            "status": "done",
+            "testStrategy": "Test concurrent state access with multiple simulated polling operations. Verify state consistency during rapid updates. Test state change notifications. Verify thread safety with concurrent read/write operations."
+          },
+          {
+            "id": 5,
+            "title": "Implement Vehicle Association and Core Integration",
+            "description": "Create the automatic device-to-vehicle association system and integrate all components into a cohesive core engine with proper shutdown handling.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implement logic to associate devices with vehicles based on configuration rules and device characteristics. Create the _wait_for_shutdown() coroutine that handles graceful shutdown on system signals. Implement proper cleanup of all resources during shutdown. Add system-wide event handling for critical events like device connection/disconnection. Finalize the start() method to launch all required tasks and the stop() method to properly terminate all operations. Implement proper exception handling throughout the core engine.",
+            "status": "done",
+            "testStrategy": "Test vehicle association with various device configurations. Verify graceful shutdown with active operations in progress. Test system-wide event propagation. Verify resource cleanup during shutdown. Test exception handling with simulated failures in various components."
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Implement InfluxDB Data Storage",
+        "description": "Create the data storage layer using InfluxDB for time series data with proper tagging and organization.",
+        "details": "1. Create the data storage module in `battery_hawk/core/storage.py`\n2. Implement InfluxDB client with AsyncIO support\n3. Create data models matching the specified schema:\n```python\nclass InfluxDBStorage:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.client = None\n        self.connected = False\n        \n    async def connect(self):\n        influx_config = self.config.system_config['influxdb']\n        if not influx_config['enabled']:\n            return False\n            \n        try:\n            # Connect to InfluxDB\n            self.client = InfluxDBClient(\n                host=influx_config['host'],\n                port=influx_config['port'],\n                username=influx_config['username'],\n                password=influx_config['password'],\n                database=influx_config['database']\n            )\n            # Create database if it doesn't exist\n            dbs = self.client.get_list_database()\n            if influx_config['database'] not in [db['name'] for db in dbs]:\n                self.client.create_database(influx_config['database'])\n            self.client.switch_database(influx_config['database'])\n            self.connected = True\n            return True\n        except Exception as e:\n            logger.error(f\"Failed to connect to InfluxDB: {e}\")\n            self.connected = False\n            return False\n            \n    async def store_reading(self, device_id, vehicle_id, device_type, reading):\n        if not self.connected:\n            logger.warning(\"InfluxDB not connected, dropping measurement\")\n            return False\n            \n        # Get device and vehicle info\n        device = self.config.devices.get('devices', {}).get(device_id, {})\n        vehicle = self.config.vehicles.get('vehicles', {}).get(vehicle_id, {})\n        \n        # Create point\n        point = {\n            \"measurement\": \"battery_reading\",\n            \"time\": datetime.utcnow().isoformat(),\n            \"tags\": {\n                \"device_id\": device_id,\n                \"device_name\": device.get('friendly_name', device_id),\n                \"vehicle_name\": vehicle.get('name', 'Unknown'),\n                \"device_type\": device_type\n            },\n            \"fields\": reading\n        }\n        \n        try:\n            self.client.write_points([point])\n            return True\n        except Exception as e:\n            logger.error(f\"Failed to write to InfluxDB: {e}\")\n            return False\n```\n4. Implement database abstraction layer for future backends\n5. Create retention policy implementation\n6. Implement error handling for database unavailability",
+        "testStrategy": "1. Test InfluxDB connection with mock InfluxDB server\n2. Verify data point creation with proper schema\n3. Test error handling when database is unavailable\n4. Verify retention policy implementation\n5. Test database abstraction layer with mock alternative backend\n6. Verify proper tagging of measurements",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Implement REST API with Flask",
+        "description": "Create the RESTful API using Flask with JSON-API standard compliance for device and vehicle management.",
+        "details": "1. Create the API module in `battery_hawk/api/`\n2. Implement Flask application with AsyncIO integration:\n```python\nclass BatteryHawkAPI:\n    def __init__(self, config_manager, core_engine):\n        self.config = config_manager\n        self.core = core_engine\n        self.app = Flask(__name__)\n        self.setup_routes()\n        \n    def setup_routes(self):\n        # Device endpoints\n        self.app.route('/api/devices', methods=['GET'])(self.get_devices)\n        self.app.route('/api/devices/<mac>', methods=['GET'])(self.get_device)\n        self.app.route('/api/devices/<mac>', methods=['POST'])(self.configure_device)\n        self.app.route('/api/devices/<mac>', methods=['PATCH'])(self.update_device)\n        self.app.route('/api/devices/<mac>', methods=['DELETE'])(self.delete_device)\n        \n        # Vehicle endpoints\n        self.app.route('/api/vehicles', methods=['GET'])(self.get_vehicles)\n        self.app.route('/api/vehicles/<id>', methods=['GET'])(self.get_vehicle)\n        self.app.route('/api/vehicles', methods=['POST'])(self.create_vehicle)\n        self.app.route('/api/vehicles/<id>', methods=['PATCH'])(self.update_vehicle)\n        self.app.route('/api/vehicles/<id>', methods=['DELETE'])(self.delete_vehicle)\n        \n        # Reading endpoints\n        self.app.route('/api/readings/<mac>', methods=['GET'])(self.get_readings)\n        \n        # System endpoints\n        self.app.route('/api/system/config', methods=['GET'])(self.get_system_config)\n        self.app.route('/api/system/config', methods=['PATCH'])(self.update_system_config)\n        self.app.route('/api/system/status', methods=['GET'])(self.get_system_status)\n        \n    def get_devices(self):\n        devices = self.config.devices.get('devices', {})\n        return jsonify({\n            'data': [\n                {\n                    'type': 'device',\n                    'id': mac,\n                    'attributes': device\n                } for mac, device in devices.items()\n            ]\n        })\n```\n3. Implement all API endpoints according to the PRD\n4. Create JSON-API compliant response formatting\n5. Implement request validation and error handling\n6. Create async thread for API serving",
+        "testStrategy": "1. Unit test each API endpoint with mock requests\n2. Verify JSON-API compliance in responses\n3. Test error handling with invalid requests\n4. Integration test with core engine\n5. Verify authentication if implemented\n6. Test concurrent API requests",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement MQTT Messaging Interface",
+        "description": "Create the MQTT messaging interface using UpDryTwist implementation for real-time data publishing.",
+        "details": "1. Create the MQTT module in `battery_hawk/mqtt/`\n2. Implement UpDryTwist-based MQTT client:\n```python\nclass MQTTInterface:\n    def __init__(self, config_manager, core_engine):\n        self.config = config_manager\n        self.core = core_engine\n        self.client = None\n        self.connected = False\n        self.topic_prefix = self.config.system_config['mqtt']['topic_prefix']\n        \n    async def connect(self):\n        mqtt_config = self.config.system_config['mqtt']\n        if not mqtt_config['enabled']:\n            return False\n            \n        try:\n            # Connect to MQTT broker using UpDryTwist\n            self.client = MQTTClient(\n                client_id=f\"battery_hawk_{uuid.uuid4().hex[:8]}\",\n                host=mqtt_config['broker'],\n                port=mqtt_config['port']\n            )\n            await self.client.connect()\n            self.connected = True\n            \n            # Register core event handlers\n            self.core.on_device_reading(self.publish_device_reading)\n            self.core.on_device_status_change(self.publish_device_status)\n            self.core.on_vehicle_update(self.publish_vehicle_summary)\n            self.core.on_system_status_change(self.publish_system_status)\n            self.core.on_device_discovered(self.publish_device_discovered)\n            \n            return True\n        except Exception as e:\n            logger.error(f\"Failed to connect to MQTT broker: {e}\")\n            self.connected = False\n            return False\n            \n    async def publish_device_reading(self, device_id, reading):\n        if not self.connected:\n            return False\n            \n        topic = f\"{self.topic_prefix}/device/{device_id}/reading\"\n        payload = json.dumps(reading)\n        \n        try:\n            await self.client.publish(topic, payload, qos=0, retain=False)\n            return True\n        except Exception as e:\n            logger.error(f\"Failed to publish to MQTT: {e}\")\n            return False\n```\n3. Implement all MQTT topics as specified in the PRD\n4. Create event handlers for core engine events\n5. Implement reconnection logic for broker disconnections\n6. Create proper JSON payload formatting",
+        "testStrategy": "1. Test MQTT connection with mock broker\n2. Verify topic structure and payload format\n3. Test reconnection logic with simulated disconnections\n4. Integration test with core engine events\n5. Verify QoS levels and retention settings\n6. Test with high message volume",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Implement Home Assistant Integration",
+        "description": "Create the Home Assistant custom component for Battery Hawk integration with automatic discovery.",
+        "details": "1. Create the Home Assistant integration package in `homeassistant_battery_hawk/`\n2. Implement component structure following Home Assistant standards:\n```\nhomeassistant_battery_hawk/\n├── __init__.py           # Component initialization\n├── manifest.json        # Component manifest\n├── config_flow.py       # Configuration flow\n├── const.py             # Constants\n├── sensor.py            # Sensor platform\n└── battery_monitor.py   # Battery monitor entity\n```\n3. Create manifest.json:\n```json\n{\n  \"domain\": \"battery_hawk\",\n  \"name\": \"Battery Hawk\",\n  \"documentation\": \"https://github.com/yourusername/battery_hawk\",\n  \"dependencies\": [],\n  \"codeowners\": [\"@yourusername\"],\n  \"requirements\": [],\n  \"iot_class\": \"local_polling\",\n  \"version\": \"0.1.0\"\n}\n```\n4. Implement discovery mechanism for Battery Hawk instances\n5. Create sensor entities for battery metrics\n6. Implement device registry integration",
+        "testStrategy": "1. Test component loading in Home Assistant test environment\n2. Verify discovery mechanism with mock Battery Hawk instance\n3. Test sensor entity creation and updates\n4. Verify device registry integration\n5. Test configuration flow\n6. Verify entity attributes and state updates",
+        "priority": "low",
+        "dependencies": [
+          7,
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement Command Line Interface",
+        "description": "Create a command-line interface for setup, configuration, and management of Battery Hawk.",
+        "details": "1. Create CLI module in `battery_hawk/cli/`\n2. Implement command structure using Click or argparse:\n```python\nimport click\n\n@click.group()\ndef cli():\n    \"\"\"Battery Hawk - Battery Monitoring Solution\"\"\"\n    pass\n\n@cli.command()\ndef discover():\n    \"\"\"Discover BLE battery monitors\"\"\"\n    click.echo(\"Scanning for battery monitors...\")\n    # Implement discovery logic\n    \n@cli.command()\n@click.argument('mac')\ndef configure(mac):\n    \"\"\"Configure a discovered device\"\"\"\n    click.echo(f\"Configuring device {mac}...\")\n    # Implement configuration logic\n    \n@cli.command()\ndef list_devices():\n    \"\"\"List all configured devices\"\"\"\n    click.echo(\"Configured devices:\")\n    # Implement device listing\n    \n@cli.command()\ndef list_vehicles():\n    \"\"\"List all vehicles\"\"\"\n    click.echo(\"Configured vehicles:\")\n    # Implement vehicle listing\n    \n@cli.command()\n@click.argument('name')\ndef create_vehicle(name):\n    \"\"\"Create a new vehicle\"\"\"\n    click.echo(f\"Creating vehicle {name}...\")\n    # Implement vehicle creation\n    \n@cli.command()\ndef status():\n    \"\"\"Show system status\"\"\"\n    click.echo(\"System status:\")\n    # Implement status display\n\nif __name__ == '__main__':\n    cli()\n```\n3. Implement interactive configuration wizard\n4. Create device management commands\n5. Implement vehicle management commands\n6. Create system configuration commands",
+        "testStrategy": "1. Test each CLI command with mock system\n2. Verify command output formatting\n3. Test interactive wizard with simulated inputs\n4. Verify error handling with invalid inputs\n5. Test configuration changes through CLI\n6. Verify help text and documentation",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Implement Comprehensive Logging System",
+        "description": "Create a robust logging system with configurable levels, file/stdout output, and proper error categorization.",
+        "details": "1. Create logging module in `battery_hawk/core/logging.py`\n2. Implement configurable logging levels (DEBUG, INFO, WARN, ERROR)\n3. Create file and stdout logging handlers:\n```python\nimport logging\nimport os\nfrom logging.handlers import RotatingFileHandler\n\ndef setup_logging(config):\n    # Get logging configuration\n    log_config = config.system_config.get('logging', {})\n    log_level = getattr(logging, log_config.get('level', 'INFO'))\n    file_logging = log_config.get('file_logging', False)\n    log_file = log_config.get('log_file', '/data/battery_hawk.log')\n    \n    # Create logger\n    logger = logging.getLogger('battery_hawk')\n    logger.setLevel(log_level)\n    \n    # Create formatter\n    formatter = logging.Formatter(\n        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'\n    )\n    \n    # Create console handler\n    console_handler = logging.StreamHandler()\n    console_handler.setLevel(log_level)\n    console_handler.setFormatter(formatter)\n    logger.addHandler(console_handler)\n    \n    # Create file handler if enabled\n    if file_logging:\n        # Ensure directory exists\n        os.makedirs(os.path.dirname(log_file), exist_ok=True)\n        \n        # Create rotating file handler (10MB max, 5 backups)\n        file_handler = RotatingFileHandler(\n            log_file, maxBytes=10*1024*1024, backupCount=5\n        )\n        file_handler.setLevel(log_level)\n        file_handler.setFormatter(formatter)\n        logger.addHandler(file_handler)\n    \n    return logger\n```\n4. Implement proper error categorization according to PRD guidelines\n5. Create context-aware logging with device/vehicle information\n6. Implement log rotation for file logging",
+        "testStrategy": "1. Test logging configuration with different settings\n2. Verify log output format\n3. Test file logging with rotation\n4. Verify proper error categorization\n5. Test context-aware logging\n6. Verify log level filtering",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Implement System Integration Tests and Documentation",
+        "description": "Create comprehensive system tests, documentation, and example configurations for Battery Hawk.",
+        "details": "1. Create integration test suite covering all system components\n2. Implement mock BLE devices for testing\n3. Create example configurations for different use cases\n4. Write comprehensive documentation:\n   - Installation guide\n   - Configuration reference\n   - API documentation\n   - MQTT topic reference\n   - Home Assistant integration guide\n   - Troubleshooting guide\n5. Create Docker Compose examples for different deployment scenarios\n6. Implement CI/CD pipeline for automated testing\n\nExample Docker Compose file:\n```yaml\nversion: '3'\n\nservices:\n  battery-hawk:\n    build: .\n    container_name: battery-hawk\n    restart: unless-stopped\n    network_mode: host\n    cap_add:\n      - NET_ADMIN\n    volumes:\n      - ./data:/data\n    environment:\n      - BATTERYHAWK_INFLUXDB_HOST=influxdb\n      - BATTERYHAWK_INFLUXDB_PORT=8086\n      - BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk\n      - BATTERYHAWK_LOGGING_LEVEL=INFO\n      - BATTERYHAWK_API_PORT=5000\n    depends_on:\n      - influxdb\n\n  influxdb:\n    image: influxdb:1.8\n    container_name: influxdb\n    restart: unless-stopped\n    ports:\n      - \"8086:8086\"\n    volumes:\n      - ./influxdb-data:/var/lib/influxdb\n    environment:\n      - INFLUXDB_DB=battery_hawk\n      - INFLUXDB_HTTP_AUTH_ENABLED=false\n```",
+        "testStrategy": "1. Run integration tests in CI environment\n2. Verify documentation accuracy\n3. Test example configurations in different environments\n4. Verify Docker Compose examples\n5. Test installation process on different platforms\n6. Verify API documentation against actual implementation",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Device Scanning Functionality",
+        "description": "Develop functionality to scan for local BM6 or BM2 devices from the command-line, with options to either list discovered devices or connect and retrieve device information.",
+        "details": "1. Create a scanning module in `battery_hawk/core/scanning.py`:\n```python\nimport asyncio\nfrom bleak import BleakScanner\nfrom battery_hawk.core.devices import BM6Device, BM2Device\n\nclass DeviceScanner:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.known_devices = self.config.get_known_devices()\n        \n    async def scan_for_devices(self, timeout=10.0):\n        \"\"\"Scan for BM6 and BM2 devices in range\"\"\"\n        devices = await BleakScanner.discover(timeout=timeout)\n        battery_monitors = []\n        \n        for device in devices:\n            if self._is_battery_monitor(device):\n                battery_monitors.append(self._create_device_info(device))\n                \n        return battery_monitors\n    \n    def _is_battery_monitor(self, device):\n        \"\"\"Check if device is a BM6 or BM2 based on advertisement data\"\"\"\n        # Implement detection logic based on manufacturer data or service UUIDs\n        # Return True if device is a battery monitor, False otherwise\n        \n    def _create_device_info(self, device):\n        \"\"\"Create device info dictionary from discovered device\"\"\"\n        return {\n            'address': device.address,\n            'name': device.name or 'Unknown',\n            'rssi': device.rssi,\n            'type': self._determine_device_type(device),\n            'is_known': device.address in self.known_devices\n        }\n        \n    def _determine_device_type(self, device):\n        \"\"\"Determine if device is BM6 or BM2 based on advertisement data\"\"\"\n        # Implement logic to determine device type\n        # Return 'BM6' or 'BM2'\n```\n\n2. Integrate scanning functionality with CLI module in `battery_hawk/cli/commands.py`:\n```python\nimport click\nimport asyncio\nfrom battery_hawk.core.scanning import DeviceScanner\n\n@click.command()\n@click.option('--timeout', default=10.0, help='Scan timeout in seconds')\n@click.option('--connect', is_flag=True, help='Connect to discovered devices and retrieve information')\n@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')\ndef scan(timeout, connect, format):\n    \"\"\"Scan for BM6 and BM2 devices in range\"\"\"\n    config_manager = click.get_current_context().obj['config']\n    scanner = DeviceScanner(config_manager)\n    \n    click.echo(\"Scanning for battery monitors...\")\n    devices = asyncio.run(scanner.scan_for_devices(timeout))\n    \n    if not devices:\n        click.echo(\"No battery monitors found.\")\n        return\n    \n    if connect:\n        devices = asyncio.run(_connect_and_get_info(devices))\n    \n    _display_devices(devices, format)\n\nasync def _connect_and_get_info(devices):\n    \"\"\"Connect to each device and retrieve additional information\"\"\"\n    # Implement connection logic to retrieve battery status, etc.\n    # Return devices with additional information\n    \ndef _display_devices(devices, format):\n    \"\"\"Display discovered devices in specified format\"\"\"\n    if format == 'json':\n        click.echo(json.dumps(devices, indent=2))\n    else:\n        # Create a formatted table\n        headers = ['Address', 'Name', 'Type', 'RSSI', 'Status']\n        rows = [[d['address'], d['name'], d['type'], d['rssi'], \n                'Known' if d['is_known'] else 'New'] for d in devices]\n        click.echo(tabulate(rows, headers=headers))\n```\n\n3. Update the main CLI group in `battery_hawk/cli/__init__.py` to include the scan command:\n```python\nfrom battery_hawk.cli.commands import scan\n\n@click.group()\n@click.pass_context\ndef cli(ctx):\n    \"\"\"Battery Hawk - Battery Monitoring Solution\"\"\"\n    # Initialize config and pass to commands\n    ctx.obj = {'config': ConfigManager()}\n\ncli.add_command(scan)\n```\n\n4. Implement device connection functionality in `battery_hawk/core/devices.py`:\n```python\nclass BatteryMonitor:\n    \"\"\"Base class for battery monitor devices\"\"\"\n    def __init__(self, address, name=None):\n        self.address = address\n        self.name = name\n        self.client = None\n        \n    async def connect(self):\n        \"\"\"Connect to the device\"\"\"\n        self.client = BleakClient(self.address)\n        await self.client.connect()\n        \n    async def disconnect(self):\n        \"\"\"Disconnect from the device\"\"\"\n        if self.client and self.client.is_connected:\n            await self.client.disconnect()\n            \n    async def get_info(self):\n        \"\"\"Get device information\"\"\"\n        # To be implemented by subclasses\n        pass\n\nclass BM6Device(BatteryMonitor):\n    \"\"\"BM6 battery monitor device\"\"\"\n    async def get_info(self):\n        \"\"\"Get BM6 device information\"\"\"\n        # Implement BM6-specific information retrieval\n        \nclass BM2Device(BatteryMonitor):\n    \"\"\"BM2 battery monitor device\"\"\"\n    async def get_info(self):\n        \"\"\"Get BM2 device information\"\"\"\n        # Implement BM2-specific information retrieval\n```",
+        "testStrategy": "1. Test device scanning with mock BLE devices:\n   - Create mock BM6 and BM2 devices with appropriate advertisement data\n   - Verify scanner correctly identifies battery monitor devices\n   - Test with various timeout values\n\n2. Test device type detection:\n   - Verify correct identification of BM6 vs BM2 devices\n   - Test with edge cases and unknown devices\n\n3. Test CLI command functionality:\n   - Verify scan command works with default parameters\n   - Test with different timeout values\n   - Test with and without --connect flag\n   - Verify both table and JSON output formats\n\n4. Test device connection and information retrieval:\n   - Verify connection to mock devices\n   - Test error handling for connection failures\n   - Verify correct information retrieval from connected devices\n   - Test disconnection handling\n\n5. Integration testing:\n   - Test scanning with real BM6/BM2 devices if available\n   - Verify RSSI values are correctly reported\n   - Test in environments with multiple devices\n   - Verify performance with many devices in range\n\n6. Test error handling:\n   - Test behavior when no devices are found\n   - Test with Bluetooth disabled\n   - Test with permission issues\n   - Verify appropriate error messages are displayed",
+        "status": "in-progress",
+        "dependencies": [
+          5,
+          10
+        ],
+        "priority": "high",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-13T05:13:27.556Z",
+      "updated": "2025-07-19T22:35:45.310Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

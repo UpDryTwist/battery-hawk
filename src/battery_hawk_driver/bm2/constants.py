@@ -1,0 +1,46 @@
+"""BM2 protocol constants and UUIDs."""
+
+# Service UUIDs
+BM2_SERVICE_UUID = "0000ff00-0000-1000-8000-00805f9b34fb"
+
+# Characteristic UUIDs
+BM2_DATA_CHARACTERISTIC_UUID = "0000ff01-0000-1000-8000-00805f9b34fb"
+BM2_COMMAND_CHARACTERISTIC_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
+BM2_CONFIG_CHARACTERISTIC_UUID = "0000ff03-0000-1000-8000-00805f9b34fb"
+BM2_INFO_CHARACTERISTIC_UUID = "0000ff04-0000-1000-8000-00805f9b34fb"
+BM2_DEVICE_NAME_UUID = (
+    "00002a00-0000-1000-8000-00805f9b34fb"  # Standard BLE Device Name
+)
+
+# Command codes
+CMD_REQUEST_BATTERY_DATA = 0x01
+CMD_SET_ALARM_THRESHOLD = 0x02
+CMD_CONFIGURE_DISPLAY = 0x03
+CMD_RESET_DEVICE = 0x04
+CMD_SET_BATTERY_CAPACITY = 0x05
+
+# Protocol markers
+DATA_PACKET_HEADER = 0xAA
+
+# Alarm types
+ALARM_LOW_VOLTAGE = 0x01
+ALARM_HIGH_VOLTAGE = 0x02
+ALARM_LOW_TEMPERATURE = 0x03
+ALARM_HIGH_TEMPERATURE = 0x04
+
+# Display modes
+DISPLAY_BASIC = 0x01
+DISPLAY_ADVANCED = 0x02
+DISPLAY_DETAILED = 0x03
+
+# Data conversion factors
+VOLTAGE_CONVERSION_FACTOR = 1.0  # Data is in mV, no conversion needed for display
+CURRENT_CONVERSION_FACTOR = 1.0  # Data is in mA, no conversion needed for display
+TEMPERATURE_CONVERSION_FACTOR = 10.0  # Divide by 10 for Celsius
+CAPACITY_CONVERSION_FACTOR = 1.0  # Data is in mAh, no conversion needed for display
+
+# Minimum data lengths
+MIN_DATA_PACKET_LENGTH = 11  # Header + voltage(2) + current(2) + temp(2) + soc(1) + capacity(2) + checksum(1)
+MIN_COMMAND_LENGTH = 1  # Just command ID
+MIN_ALARM_COMMAND_LENGTH = 4  # Command ID + alarm type + threshold(2)
+MIN_CAPACITY_COMMAND_LENGTH = 3  # Command ID + capacity(2)
