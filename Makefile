@@ -48,7 +48,53 @@ poetry-config:
 	@poetry config virtualenvs.path .venv
 
 system-requirements-install:
+ifeq ($(IS_WINDOWS),Windows_NT)
 	@winget install rhysd.actionlint koalaman.shellcheck mvdan.shfmt Gitleaks.Gitleaks Thoughtworks.Talisman waterlan.dos2unix GitHub.cli
+else
+	@set -e; \
+	sudo apt-get update; \
+	sudo apt-get install -y shellcheck shfmt gitleaks dos2unix; \
+	# actionlint (install from upstream if missing)
+	if ! command -v actionlint >/dev/null 2>&1; then \
+	  echo "Installing actionlint..."; \
+	  tmpdir=$$(mktemp -d); cd $$tmpdir; \
+	  curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash -o dl.sh; \
+	  bash dl.sh latest . >/dev/null; \
+	  sudo install -m 0755 actionlint /usr/local/bin/actionlint; \
+	  cd /; rm -rf $$tmpdir; \
+	fi; \
+	\
+	# talisman (install from upstream if missing)
+	if ! command -v talisman >/dev/null 2>&1; then \
+	  echo "Installing Talisman..."; \
+	  tmpdir=$$(mktemp -d); cd $$tmpdir; \
+	  curl -fsSL https://thoughtworks.github.io/talisman/install.sh -o install.sh; \
+	  bash install.sh latest . >/dev/null; \
+	  sudo install -m 0755 talisman /usr/local/bin/talisman; \
+	  cd /; rm -rf $$tmpdir; \
+	fi; \
+	\
+	# GitHub CLI (add official repo if not installed)
+	if ! command -v gh >/dev/null 2>&1; then \
+	  echo "Installing GitHub CLI (gh)..."; \
+	  sudo mkdir -p -m 0755 /etc/apt/keyrings; \
+	  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null; \
+	  sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+	  echo "deb [arch=$$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null; \
+	  sudo apt-get update; \
+	  sudo apt-get install -y gh; \
+	fi
+endif
+
+lint-tools-check:
+	@echo "---- tool versions ----"; \
+	for cmd in actionlint shellcheck shfmt gitleaks talisman dos2unix gh; do \
+	  if command -v $$cmd >/dev/null 2>&1; then \
+	    printf "%-10s " $$cmd; $$cmd --version 2>/dev/null || $$cmd version 2>/dev/null || echo "(installed)"; \
+	  else \
+	    echo "$$cmd NOT FOUND"; \
+	  fi; \
+	done
 
 install:
 	@poetry install

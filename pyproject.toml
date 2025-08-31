@@ -34,13 +34,13 @@ profile = "black"
 [tool.pyright]
 venv = ".venv"
 venvPath = "."
-pythonVersion = "3.13"
+pythonVersion = "3.12"
 # TODO: fix for earlier Python versions
 # Include this if you're feeling you have too much time on your hands
 # typeCheckingMode = "strict"
 
 [tool.poetry.dependencies]
-python = ">=3.13,<4.0"
+python = ">=3.12,<4.0"
 bleak = "^1.0.1"
 cryptography = "^42.0.0"
 flask = "^3.1.1"

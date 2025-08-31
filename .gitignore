@@ -160,6 +160,7 @@ node_modules/
 # OS specific
 .DS_Store
 .cursor/mcp.json
+.roo/mcp.json
 
 # Task files
 # tasks.json
