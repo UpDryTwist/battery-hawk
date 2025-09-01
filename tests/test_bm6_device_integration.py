@@ -4,6 +4,7 @@ import pytest
 
 from src.battery_hawk_driver.base.connection import BLEConnectionPool
 from src.battery_hawk_driver.bm6.device import BM6Device
+from src.battery_hawk_driver.bm6.exceptions import BM6ConnectionError
 
 
 class DummyConfig:
@@ -74,12 +75,6 @@ async def test_bm6_device_commands() -> None:
     # Test voltage/temp request
     await device.request_voltage_temp()
 
-    # Test basic info request
-    await device.request_basic_info()
-
-    # Test cell voltages request
-    await device.request_cell_voltages()
-
     # Test send_command interface
     status = await device.send_command("request_voltage_temp")
     assert status.connected is True
@@ -109,12 +104,13 @@ async def test_bm6_device_notification_handler() -> None:
     # Test notification handler with mock data
     # This simulates receiving encrypted BM6 data
     mock_notification_data = bytearray(
-        b"\x00" * 16
+        b"\x00" * 16,
     )  # 16 bytes of zeros as mock encrypted data
 
     # Call notification handler directly
     device._notification_handler(
-        "0000fff4-0000-1000-8000-00805f9b34fb", mock_notification_data
+        "0000fff4-0000-1000-8000-00805f9b34fb",
+        mock_notification_data,
     )
 
     # The handler should not crash and should log appropriately
@@ -136,16 +132,9 @@ async def test_bm6_device_error_handling() -> None:
     )
 
     # Test that operations fail gracefully without connection pool
-    from src.battery_hawk_driver.bm6.exceptions import BM6ConnectionError
 
     with pytest.raises(BM6ConnectionError):
         await device.connect()
 
     with pytest.raises(RuntimeError):
         await device.request_voltage_temp()
-
-    with pytest.raises(RuntimeError):
-        await device.request_basic_info()
-
-    with pytest.raises(RuntimeError):
-        await device.request_cell_voltages()

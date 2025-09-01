@@ -141,21 +141,21 @@ async def _create_connection(self, device_address: str) -> dict:
     try:
         client = BleakClient(device_address, timeout=self.connection_timeout)
         await client.connect()
-        
+
         # Verify connection and services
         if not client.is_connected:
             raise BLEConnectionError(f"Failed to connect to {device_address}")
-            
+
         conn = {
             "device_address": device_address,
             "client": client,
             "connected_at": time.time(),
-            "notifications": {}  # Track active notifications
+            "notifications": {},  # Track active notifications
         }
-        
+
         self.active_connections[device_address] = conn
         return conn
-        
+
     except Exception as e:
         self.logger.error(f"BLE connection failed for {device_address}: {e}")
         raise
@@ -168,7 +168,7 @@ async def start_notifications(self, device_address: str, char_uuid: str, callbac
     conn = self.active_connections.get(device_address)
     if not conn or not conn["client"].is_connected:
         raise BLEConnectionError(f"No active connection for {device_address}")
-        
+
     client = conn["client"]
     await client.start_notify(char_uuid, callback)
     conn["notifications"][char_uuid] = callback
@@ -179,24 +179,21 @@ async def start_notifications(self, device_address: str, char_uuid: str, callbac
 async def connect(self) -> None:
     """Connect to BM6 device and set up notifications."""
     await super().connect()
-    
+
     # Set up notifications for BM6 data
     await self.connection_pool.start_notifications(
-        self.device_address,
-        BM6_NOTIFY_CHARACTERISTIC_UUID,
-        self._notification_handler
+        self.device_address, BM6_NOTIFY_CHARACTERISTIC_UUID, self._notification_handler
     )
-    
+
     # Request initial data
     await self.request_voltage_temp()
+
 
 async def request_voltage_temp(self) -> None:
     """Send actual encrypted command to BM6."""
     command = build_voltage_temp_request()  # Already implemented
     await self.connection_pool.write_characteristic(
-        self.device_address,
-        BM6_WRITE_CHARACTERISTIC_UUID,
-        command
+        self.device_address, BM6_WRITE_CHARACTERISTIC_UUID, command
     )
 ```
 

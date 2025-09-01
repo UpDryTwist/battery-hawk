@@ -35,8 +35,6 @@ from .exceptions import (
 )
 from .parser import BM6Parser
 from .protocol import (
-    build_basic_info_request,
-    build_cell_voltages_request,
     build_voltage_temp_request,
 )
 
@@ -87,12 +85,10 @@ class BM6Device(BaseMonitorDevice):
             "read_current",
             "read_temperature",
             "read_state_of_charge",
-            "read_capacity",
-            "read_cycles",
-            "read_cell_voltages",
-            "read_protection_status",
-            "read_fet_status",
-            "read_balance_status",
+            "read_state",
+            "read_rapid_acceleration",
+            "read_rapid_deceleration",
+            "read_firmware_version",
         }
 
     async def connect(self) -> None:
@@ -315,12 +311,6 @@ class BM6Device(BaseMonitorDevice):
             if command == "request_voltage_temp":
                 await self.request_voltage_temp()
                 return DeviceStatus(connected=True, last_command=command)
-            if command == "request_basic_info":
-                await self.request_basic_info()
-                return DeviceStatus(connected=True, last_command=command)
-            if command == "request_cell_voltages":
-                await self.request_cell_voltages()
-                return DeviceStatus(connected=True, last_command=command)
             raise ValueError(f"Unsupported BM6 command: {command}")
 
         except Exception:
@@ -433,7 +423,7 @@ class BM6Device(BaseMonitorDevice):
         try:
             # Build the encrypted command
             command = build_voltage_temp_request()
-            self.logger.debug(
+            self.logger.info(
                 "Sending voltage/temp request to BM6 device %s: %s",
                 self.device_address,
                 command.hex(),
@@ -454,90 +444,6 @@ class BM6Device(BaseMonitorDevice):
         except Exception:
             self.logger.exception(
                 "Failed to request voltage/temp from BM6 device %s",
-                self.device_address,
-            )
-            raise
-
-    async def request_basic_info(self) -> None:
-        """Request basic information from the BM6 device."""
-        if self.connection_pool is None:
-            raise RuntimeError(
-                "No connection pool available for BM6 basic info request.",
-            )
-
-        # Verify we have an active connection
-        if not self.connection_pool.is_connected(self.device_address):
-            raise BM6ConnectionError(
-                f"No active BLE connection for device {self.device_address}",
-                device_address=self.device_address,
-            )
-
-        try:
-            # Build the command (note: this uses legacy protocol, not encrypted)
-            command = build_basic_info_request()
-            self.logger.debug(
-                "Sending basic info request to BM6 device %s: %s",
-                self.device_address,
-                command.hex(),
-            )
-
-            # Send the command to the BM6 device
-            await self.connection_pool.write_characteristic(
-                self.device_address,
-                self.write_characteristic_uuid,
-                command,
-            )
-
-            self.logger.info(
-                "Basic info request sent successfully to BM6 device %s",
-                self.device_address,
-            )
-
-        except Exception:
-            self.logger.exception(
-                "Failed to request basic info from BM6 device %s",
-                self.device_address,
-            )
-            raise
-
-    async def request_cell_voltages(self) -> None:
-        """Request cell voltage information from the BM6 device."""
-        if self.connection_pool is None:
-            raise RuntimeError(
-                "No connection pool available for BM6 cell voltages request.",
-            )
-
-        # Verify we have an active connection
-        if not self.connection_pool.is_connected(self.device_address):
-            raise BM6ConnectionError(
-                f"No active BLE connection for device {self.device_address}",
-                device_address=self.device_address,
-            )
-
-        try:
-            # Build the command (note: this uses legacy protocol, not encrypted)
-            command = build_cell_voltages_request()
-            self.logger.debug(
-                "Sending cell voltages request to BM6 device %s: %s",
-                self.device_address,
-                command.hex(),
-            )
-
-            # Send the command to the BM6 device
-            await self.connection_pool.write_characteristic(
-                self.device_address,
-                self.write_characteristic_uuid,
-                command,
-            )
-
-            self.logger.info(
-                "Cell voltages request sent successfully to BM6 device %s",
-                self.device_address,
-            )
-
-        except Exception:
-            self.logger.exception(
-                "Failed to request cell voltages from BM6 device %s",
                 self.device_address,
             )
             raise
@@ -572,12 +478,6 @@ class BM6Device(BaseMonitorDevice):
 
             # Try to parse as real BM6 data first (with AES decryption)
             parsed_data = self.parser.parse_real_bm6_data(data_bytes)
-            if parsed_data is None:
-                # Try to parse as a structured response
-                parsed_data = self.parser.parse_response(data_bytes)
-            if parsed_data is None:
-                # Fall back to legacy notification format
-                parsed_data = self.parser.parse_notification(data_bytes)
 
             if parsed_data:
                 self._latest_data.update(parsed_data)

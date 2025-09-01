@@ -6,6 +6,7 @@ import pytest
 
 from src.battery_hawk_driver.base.connection import BLEConnectionPool
 from src.battery_hawk_driver.bm6.device import BM6Device
+from src.battery_hawk_driver.bm6.exceptions import BM6ConnectionError
 
 
 class DummyConfig:
@@ -163,24 +164,15 @@ async def test_bm6_connection_validation() -> None:
     )
 
     # Test commands without connection should fail with BM6ConnectionError
-    from src.battery_hawk_driver.bm6.exceptions import BM6ConnectionError
 
     with pytest.raises(BM6ConnectionError):
         await device.request_voltage_temp()
-
-    with pytest.raises(BM6ConnectionError):
-        await device.request_basic_info()
-
-    with pytest.raises(BM6ConnectionError):
-        await device.request_cell_voltages()
 
     # Connect and verify commands work
     await device.connect()
 
     # These should not raise exceptions
     await device.request_voltage_temp()
-    await device.request_basic_info()
-    await device.request_cell_voltages()
 
     await device.disconnect()
     await pool.shutdown()

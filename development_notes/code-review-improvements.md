@@ -206,7 +206,7 @@ assert all(conn is results[0] for conn in results[1:])
     "queued": 0,
     "state_counts": {"CONNECTED": 2},
     "total_devices": 2,
-    "reconnection_enabled": True
+    "reconnection_enabled": True,
 }
 ```
 
@@ -217,10 +217,10 @@ assert all(conn is results[0] for conn in results[1:])
     "current_state": "CONNECTED",
     "state_history": [
         {"state": "CONNECTING", "timestamp": 1234567890.1},
-        {"state": "CONNECTED", "timestamp": 1234567890.5}
+        {"state": "CONNECTED", "timestamp": 1234567890.5},
     ],
     "connection_age": 120.5,
-    "active_notifications": 1
+    "active_notifications": 1,
 }
 ```
 

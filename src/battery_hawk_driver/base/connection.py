@@ -342,6 +342,30 @@ class BLEConnectionPool:
                 },
             )
 
+        except TimeoutError as e:
+            # Handle timeout errors specifically
+            error_msg = f"BLE connection timeout for {device_address}: {e}"
+            self.logger.exception(error_msg)
+
+            # Remove from pending connections
+            self._pending_connections.discard(device_address)
+
+            # Update state to error
+            await state_manager.set_state(ConnectionState.ERROR)
+
+            # Add failed connection to history
+            self.connection_history.append(
+                {
+                    "event": "connect_failed",
+                    "device_address": device_address,
+                    "timestamp": time.time(),
+                    "error": str(e),
+                    "success": False,
+                },
+            )
+
+            raise BLEConnectionError(error_msg, device_address=device_address) from e
+
         except BleakError as e:
             # Handle Bleak-specific errors
             error_msg = f"BLE connection failed for {device_address}: {e}"
@@ -397,6 +421,10 @@ class BLEConnectionPool:
         # Update state to disconnecting
         state_manager = self._get_state_manager(device_address)
         await state_manager.set_state(ConnectionState.DISCONNECTING)
+
+        # Always remove from pending connections, even if not in active connections
+        # This handles cases where connection was interrupted during setup
+        self._pending_connections.discard(device_address)
 
         if device_address not in self.active_connections:
             self.logger.warning("No active connection found for %s", device_address)

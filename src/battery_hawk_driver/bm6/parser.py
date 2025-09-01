@@ -6,16 +6,23 @@ import logging
 from typing import Any
 
 from .constants import (
-    BM6_RESPONSE_PREFIX,
+    BM6_REALTIME_RESPONSE_PREFIX,
+    BM6_VERSION_RESPONSE_PREFIX,
     CAPACITY_CONVERSION_FACTOR,
     CELL_VOLTAGE_CONVERSION_FACTOR,
     CURRENT_CONVERSION_FACTOR,
     MIN_BASIC_INFO_LENGTH,
     MIN_CELL_VOLTAGES_LENGTH,
     MIN_NOTIFICATION_LENGTH,
+    RAPID_ACCELERATION_POSITION_END,
+    RAPID_ACCELERATION_POSITION_START,
+    RAPID_DECELERATION_POSITION_END,
+    RAPID_DECELERATION_POSITION_START,
     SOC_POSITION_END,
     SOC_POSITION_START,
     SOFTWARE_VERSION_CONVERSION_FACTOR,
+    STATE_POSITION_END,
+    STATE_POSITION_START,
     TEMPERATURE_CONVERSION_FACTOR,
     TEMPERATURE_POSITION_END,
     TEMPERATURE_POSITION_START,
@@ -100,6 +107,12 @@ class BM6Parser:
                 self.logger.info("Successfully parsed as real-time data: %s", result)
                 return result
 
+            # Next, try to parse as version data
+            result = self._parse_version_data(decrypted)
+            if result:
+                self.logger.info("Successfully parsed as version data: %s", result)
+                return result
+
             # Fall back to legacy parsing
             legacy_result = self.parse_notification(decrypted)
             if legacy_result:
@@ -132,11 +145,16 @@ class BM6Parser:
         self.logger.info("Parsing BM6 real-time data from hex: %s", hex_data)
 
         # Check if this is a BM6 response (should start with d15507)
-        if not hex_data.startswith(BM6_RESPONSE_PREFIX):
+        if not hex_data.startswith(BM6_REALTIME_RESPONSE_PREFIX):
             self.logger.info(
                 "Data does not start with BM6 response prefix (%s)",
-                BM6_RESPONSE_PREFIX,
+                BM6_REALTIME_RESPONSE_PREFIX,
             )
+            return None
+
+        # If the next two characters past the prefix are FF, then this is just an echo and not the real reasponse
+        if hex_data[6:8] == "ff":
+            self.logger.info("Data is just an echo, not the real response")
             return None
 
         # Ensure we have enough data
@@ -144,6 +162,9 @@ class BM6Parser:
             VOLTAGE_POSITION_END,
             TEMPERATURE_POSITION_END,
             SOC_POSITION_END,
+            STATE_POSITION_END,
+            RAPID_ACCELERATION_POSITION_END,
+            RAPID_DECELERATION_POSITION_END,
         ):
             self.logger.warning(
                 "Insufficient data length (%d chars) for BM6 parsing",
@@ -188,11 +209,71 @@ class BM6Parser:
             result["state_of_charge"] = soc
             self.logger.info("Parsed SoC: %s -> %d%%", soc_hex, soc)
 
+            # Parse state (position 10-12)
+            state_hex = hex_data[STATE_POSITION_START:STATE_POSITION_END]
+            state = int(state_hex, 16)
+            result["state"] = state
+            self.logger.info("Parsed state: %s -> %d", state_hex, state)
+
+            # Parse rapid acceleration (position 18-22)
+            rapid_acceleration_hex = hex_data[
+                RAPID_ACCELERATION_POSITION_START:RAPID_ACCELERATION_POSITION_END
+            ]
+            rapid_acceleration = int(rapid_acceleration_hex, 16)
+            result["rapid_acceleration"] = rapid_acceleration
+            self.logger.info(
+                "Parsed rapid acceleration: %s -> %d",
+                rapid_acceleration_hex,
+                rapid_acceleration,
+            )
+
+            # Parse rapid deceleration (position 22-26)
+            rapid_deceleration_hex = hex_data[
+                RAPID_DECELERATION_POSITION_START:RAPID_DECELERATION_POSITION_END
+            ]
+            rapid_deceleration = int(rapid_deceleration_hex, 16)
+            result["rapid_deceleration"] = rapid_deceleration
+            self.logger.info(
+                "Parsed rapid deceleration: %s -> %d",
+                rapid_deceleration_hex,
+                rapid_deceleration,
+            )
+
         except (ValueError, IndexError) as e:
             self.logger.warning("Failed to parse BM6 real-time data: %s", e)
             return None
         else:
             return result
+
+    def _parse_version_data(self, data: bytes) -> dict[str, Any] | None:
+        """
+        Parse version data from BM6 device.
+
+        Args:
+            data: Raw response data
+
+        Returns:
+            Parsed version data dictionary or None if invalid
+        """
+        # Convert to hex string for parsing
+        hex_data = data.hex()
+        self.logger.info("Parsing BM6 version data from hex: %s", hex_data)
+
+        # Check if this is a BM6 response (should start with d15501)
+        if not hex_data.startswith(BM6_VERSION_RESPONSE_PREFIX):
+            self.logger.info(
+                "Data does not start with BM6 version response prefix (%s)",
+                BM6_VERSION_RESPONSE_PREFIX,
+            )
+            return None
+
+        # The firmware version is in the remainder of the response length, after the header
+        try:
+            firmware_version = hex_data[6:]
+            return {"firmware_version": firmware_version}  # noqa: TRY300
+        except (ValueError, IndexError) as e:
+            self.logger.warning("Failed to parse BM6 version data: %s", e)
+            return None
 
     @staticmethod
     def _parse_basic_info(data: bytes) -> dict[str, Any] | None:

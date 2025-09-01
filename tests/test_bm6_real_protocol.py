@@ -69,15 +69,14 @@ class TestBM6Parser:
 
     def test_parse_bm6_real_time_data_with_values(self) -> None:
         """Test parsing BM6 real-time data with actual values."""
-        # Simulate BM6 response: d15507 + status + temp_sign + skip + temp + state + voltage + padding
-        # d15507 = command response
-        # 00 = status (normal)
-        # 00 = temperature sign (positive)
-        # 00 = skip byte
-        # 14 = temperature (20°C)
-        # 64 = state of charge (100%)
-        # 05dc = voltage (15.00V)
-        test_hex = "d15507000000146405dc0000000000"
+        # Simulate BM6 response: d15507 + temp_sign + temp + state + soc + voltage + padding
+        # d15507 = command response (positions 0-5)
+        # 00 = temperature sign (positions 6-7, positive)
+        # 14 = temperature (positions 8-9, 20°C)
+        # 00 = state (positions 10-11)
+        # 64 = state of charge (positions 12-13, 100%)
+        # 05dc = voltage (positions 14-17, 15.00V)
+        test_hex = "d155070014006405dc0000000000"
         test_data = bytes.fromhex(test_hex)
 
         result = self.parser._parse_real_time_data(test_data)
@@ -89,10 +88,14 @@ class TestBM6Parser:
 
     def test_parse_bm6_real_time_data_negative_temp(self) -> None:
         """Test parsing BM6 real-time data with negative temperature."""
-        # d15507 + status + temp_sign + temp + state + voltage + padding
-        # 01 = temperature sign (negative)
-        # 0a = temperature (10°C, but negative = -10°C)
-        test_hex = "d155070001050a32012c0000000000"
+        # d15507 + temp_sign + temp + state + soc + voltage + padding
+        # d15507 = command response (positions 0-5)
+        # 01 = temperature sign (positions 6-7, negative)
+        # 0a = temperature (positions 8-9, 10°C, but negative = -10°C)
+        # 00 = state (positions 10-11)
+        # 32 = state of charge (positions 12-13, 50%)
+        # 012c = voltage (positions 14-17, 3.00V)
+        test_hex = "d15507010a0032012c00000000"
         test_data = bytes.fromhex(test_hex)
 
         result = self.parser._parse_real_time_data(test_data)
@@ -115,14 +118,13 @@ class TestBM6Parser:
     def test_parse_real_time_data(self) -> None:
         """Test parsing complete real-time data."""
         # Simulate BM6 response with voltage=15.00V, temperature=20°C, SOC=100%
-        # d15507 = command response
-        # 00 = status (normal)
-        # 00 = temperature sign (positive)
-        # 00 = skip byte
-        # 14 = temperature (20°C)
-        # 64 = state of charge (100%)
-        # 05dc = voltage (15.00V)
-        test_data = bytes.fromhex("d15507000000146405dc0000000000")
+        # d15507 = command response (positions 0-5)
+        # 00 = temperature sign (positions 6-7, positive)
+        # 14 = temperature (positions 8-9, 20°C)
+        # 00 = state (positions 10-11)
+        # 64 = state of charge (positions 12-13, 100%)
+        # 05dc = voltage (positions 14-17, 15.00V)
+        test_data = bytes.fromhex("d155070014006405dc0000000000")
 
         result = self.parser._parse_real_time_data(test_data)
 
@@ -134,7 +136,13 @@ class TestBM6Parser:
     def test_parse_real_bm6_data_with_encryption(self) -> None:
         """Test parsing encrypted BM6 data."""
         # Create test data in correct BM6 format
-        test_data = bytes.fromhex("d15507000000146405dc0000000000")
+        # d15507 = command response (positions 0-5)
+        # 00 = temperature sign (positions 6-7, positive)
+        # 14 = temperature (positions 8-9, 20°C)
+        # 00 = state (positions 10-11)
+        # 64 = state of charge (positions 12-13, 100%)
+        # 05dc = voltage (positions 14-17, 15.00V)
+        test_data = bytes.fromhex("d155070014006405dc0000000000")
 
         # Encrypt the data
         crypto = BM6Crypto()
@@ -144,9 +152,6 @@ class TestBM6Parser:
         result = self.parser.parse_real_bm6_data(encrypted_data)
 
         assert result is not None
-        assert result["voltage"] == 15.00
-        assert result["temperature"] == 20.0
-        assert result["state_of_charge"] == 100
         assert result["voltage"] == 15.00
         assert result["temperature"] == 20.0
         assert result["state_of_charge"] == 100

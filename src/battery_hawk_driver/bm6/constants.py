@@ -20,6 +20,9 @@ BM6_AES_KEY = bytes(
 CMD_REQUEST_VOLTAGE_TEMP = (
     "d1550700000000000000000000000000"  # Request voltage and temperature data
 )
+CMD_REQUEST_VERSION = (  # Request device version
+    "d1550100000000000000000000000000"
+)
 
 # Data parsing constants
 VOLTAGE_CONVERSION_FACTOR = 100.0  # Divide by 100 for volts
@@ -29,15 +32,22 @@ TEMPERATURE_CONVERSION_FACTOR = (
 TEMPERATURE_SIGN_BIT = 0x01  # Bit indicating negative temperature
 
 # BM6 response format positions (in hex string)
-BM6_RESPONSE_PREFIX = "d15507"  # Response starts with this
-VOLTAGE_POSITION_START = 16  # Voltage data starts at position 16 in hex string
-VOLTAGE_POSITION_END = 20  # Voltage data ends at position 20 in hex string
-TEMPERATURE_SIGN_POSITION_START = 8  # Temperature sign at position 8-10
-TEMPERATURE_SIGN_POSITION_END = 10
-TEMPERATURE_POSITION_START = 12  # Temperature data at position 12-14
-TEMPERATURE_POSITION_END = 14
-SOC_POSITION_START = 14  # State of charge at position 14-16
-SOC_POSITION_END = 16
+BM6_REALTIME_RESPONSE_PREFIX = "d15507"  # Response starts with this
+BM6_VERSION_RESPONSE_PREFIX = "d15501"  # Response starts with this
+VOLTAGE_POSITION_START = 14
+VOLTAGE_POSITION_END = 18
+TEMPERATURE_SIGN_POSITION_START = 6
+TEMPERATURE_SIGN_POSITION_END = 8
+TEMPERATURE_POSITION_START = 8
+TEMPERATURE_POSITION_END = 10
+SOC_POSITION_START = 12
+SOC_POSITION_END = 14
+STATE_POSITION_START = 10
+STATE_POSITION_END = 12
+RAPID_ACCELERATION_POSITION_START = 18
+RAPID_ACCELERATION_POSITION_END = 22
+RAPID_DECELERATION_POSITION_START = 22
+RAPID_DECELERATION_POSITION_END = 26
 
 # Wait time for data responses (configurable)
 DEFAULT_DATA_WAIT_TIMEOUT = 5.0  # seconds to wait for data response
