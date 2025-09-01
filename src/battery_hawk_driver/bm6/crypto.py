@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .constants import BM6_AES_KEY
+from .constants import BM6_AES_BLOCK_SIZE, BM6_AES_KEY
 
 
 class BM6Crypto:
@@ -24,29 +24,40 @@ class BM6Crypto:
 
     def encrypt(self, data: bytes) -> bytes:
         """
-        Encrypt data using AES-ECB mode.
+        Encrypt data using AES-CBC mode with zero IV.
 
         Args:
-            data: Data to encrypt
+            data: Data to encrypt (must be exactly 16 bytes for BM6 protocol)
 
         Returns:
             Encrypted data
         """
         try:
-            # Pad data to 16-byte blocks
-            padded_data = self._pad_data(data)
+            # BM6 protocol expects exactly 16 bytes - no padding needed
+            if len(data) != BM6_AES_BLOCK_SIZE:
+                self.logger.warning(
+                    "BM6 data should be exactly %d bytes, got %d bytes. Padding/truncating.",
+                    BM6_AES_BLOCK_SIZE,
+                    len(data),
+                )
+                if len(data) < BM6_AES_BLOCK_SIZE:
+                    # Pad with zeros to 16 bytes
+                    data = data + b"\x00" * (BM6_AES_BLOCK_SIZE - len(data))
+                else:
+                    # Truncate to 16 bytes
+                    data = data[:BM6_AES_BLOCK_SIZE]
 
-            # Create AES cipher in ECB mode
-            # nosec B305 - ECB mode is required by BM6 device protocol
+            # Create AES cipher in CBC mode with zero IV (as used by BM6 protocol)
+            zero_iv = b"\x00" * BM6_AES_BLOCK_SIZE  # 16 bytes of zeros for IV
             cipher = Cipher(
                 algorithms.AES(self.key),
-                modes.ECB(),  # nosec B305  # noqa: S305
+                modes.CBC(zero_iv),
                 backend=default_backend(),
             )
             encryptor = cipher.encryptor()
 
-            # Encrypt the data
-            encrypted = encryptor.update(padded_data) + encryptor.finalize()
+            # Encrypt the data (no padding needed since data is exactly 16 bytes)
+            encrypted = encryptor.update(data) + encryptor.finalize()
 
             self.logger.debug(
                 "Encrypted %d bytes to %d bytes",
@@ -61,20 +72,28 @@ class BM6Crypto:
 
     def decrypt(self, data: bytes) -> bytes:
         """
-        Decrypt data using AES-ECB mode.
+        Decrypt data using AES-CBC mode with zero IV.
 
         Args:
-            data: Data to decrypt
+            data: Data to decrypt (should be 16 bytes for BM6 protocol)
 
         Returns:
             Decrypted data
         """
         try:
-            # Create AES cipher in ECB mode
-            # nosec B305 - ECB mode is required by BM6 device protocol
+            # BM6 protocol uses 16-byte blocks
+            if len(data) != BM6_AES_BLOCK_SIZE:
+                self.logger.warning(
+                    "BM6 encrypted data should be exactly %d bytes, got %d bytes",
+                    BM6_AES_BLOCK_SIZE,
+                    len(data),
+                )
+
+            # Create AES cipher in CBC mode with zero IV (as used by BM6 protocol)
+            zero_iv = b"\x00" * BM6_AES_BLOCK_SIZE  # 16 bytes of zeros for IV
             cipher = Cipher(
                 algorithms.AES(self.key),
-                modes.ECB(),  # nosec B305  # noqa: S305
+                modes.CBC(zero_iv),
                 backend=default_backend(),
             )
             decryptor = cipher.decryptor()
@@ -82,20 +101,20 @@ class BM6Crypto:
             # Decrypt the data
             decrypted = decryptor.update(data) + decryptor.finalize()
 
-            # Remove padding
-            unpadded = self._unpad_data(decrypted)
+            # BM6 protocol uses exactly 16-byte blocks - don't strip any bytes
+            # as null bytes may be part of the actual command/data
 
             self.logger.debug(
                 "Decrypted %d bytes to %d bytes",
                 len(data),
-                len(unpadded),
+                len(decrypted),
             )
 
         except Exception:
             self.logger.exception("Failed to decrypt data.")
             return data
 
-        return unpadded
+        return decrypted
 
     def _pad_data(self, data: bytes) -> bytes:
         """

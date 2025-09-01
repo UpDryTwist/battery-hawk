@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
+
+try:
+    from bleak.exc import BleakError
+except ImportError:
+    BleakError = Exception
 
 if TYPE_CHECKING:
     import logging
@@ -14,11 +20,13 @@ from ..base.protocol import (
     BatteryInfo,
     DeviceStatus,
 )
+from ..base.state import ConnectionState
 from .bm6_error_handler import BM6ErrorHandler
 from .constants import (
     BM6_NOTIFY_CHARACTERISTIC_UUID,
     BM6_SERVICE_UUID,
     BM6_WRITE_CHARACTERISTIC_UUID,
+    DEFAULT_DATA_WAIT_TIMEOUT,
 )
 from .exceptions import (
     BM6ConnectionError,
@@ -52,6 +60,12 @@ class BM6Device(BaseMonitorDevice):
         self.write_characteristic_uuid = BM6_WRITE_CHARACTERISTIC_UUID
         self.parser = BM6Parser(logger)
         self._latest_data: dict[str, object] = {}
+        self._data_received_event = asyncio.Event()
+        self._data_wait_timeout = (
+            getattr(config, "data_wait_timeout", DEFAULT_DATA_WAIT_TIMEOUT)
+            if config
+            else DEFAULT_DATA_WAIT_TIMEOUT
+        )
         # Initialize error handler for BM6-specific error handling
         self.error_handler = BM6ErrorHandler(
             device_address,
@@ -101,10 +115,21 @@ class BM6Device(BaseMonitorDevice):
                     connection_attempt=1,
                 )
 
-            # For now, just log that we would set up notifications
-            # Note: BLE client operations will be implemented when BLEConnectionPool is enhanced
+            # Set up notifications for BM6 data using the real BLE operations
             self.logger.info(
-                "BM6 device connected (notifications would be enabled for device %s)",
+                "Setting up BM6 notifications for device %s on characteristic %s",
+                self.device_address,
+                self.notify_characteristic_uuid,
+            )
+
+            await self.connection_pool.start_notifications(
+                self.device_address,
+                self.notify_characteristic_uuid,
+                self._notification_handler,
+            )
+
+            self.logger.info(
+                "BM6 device connected and notifications enabled for device %s",
                 self.device_address,
             )
 
@@ -138,15 +163,29 @@ class BM6Device(BaseMonitorDevice):
                     device_address=self.device_address,
                 )
 
-            # Get the BLE connection from the connection pool
-            connection = await self.connection_pool.connect(self.device_address)
-            if connection is not None:
-                # For now, just log that we would stop notifications
-                # Note: BLE client operations will be implemented when BLEConnectionPool is enhanced
+            # Stop notifications before disconnecting
+            if self.connection_pool.is_connected(self.device_address):
                 self.logger.info(
-                    "BM6 device disconnected (notifications would be stopped for device %s)",
+                    "Stopping BM6 notifications for device %s on characteristic %s",
                     self.device_address,
+                    self.notify_characteristic_uuid,
                 )
+
+                try:
+                    await self.connection_pool.stop_notifications(
+                        self.device_address,
+                        self.notify_characteristic_uuid,
+                    )
+                    self.logger.info(
+                        "BM6 notifications stopped for device %s",
+                        self.device_address,
+                    )
+                except (BleakError, OSError) as e:
+                    self.logger.warning(
+                        "Failed to stop notifications for BM6 device %s: %s",
+                        self.device_address,
+                        e,
+                    )
 
             await super().disconnect()
 
@@ -191,16 +230,35 @@ class BM6Device(BaseMonitorDevice):
                     device_address=self.device_address,
                 )
 
+            # Clear the data received event
+            self._data_received_event.clear()
+
             # Request fresh data from the device
             await self.request_voltage_temp()
 
-            # Wait a moment for the device to respond
-            # Note: In a real implementation, this would wait for notifications
-            # For now, we'll use the latest data we have
+            # Wait for actual data response (not just command acknowledgment)
             self.logger.info(
-                "Reading data from BM6 device %s",
+                "Waiting for data response from BM6 device %s (timeout: %.1fs)",
                 self.device_address,
+                self._data_wait_timeout,
             )
+
+            try:
+                await asyncio.wait_for(
+                    self._data_received_event.wait(),
+                    timeout=self._data_wait_timeout,
+                )
+                self.logger.info(
+                    "Received data response from BM6 device %s",
+                    self.device_address,
+                )
+            except TimeoutError:
+                self.logger.warning(
+                    "Timeout waiting for data from BM6 device %s after %.1fs",
+                    self.device_address,
+                    self._data_wait_timeout,
+                )
+                # Continue with whatever data we have
 
             # Create battery info from the latest parsed data
             return self._create_battery_info()
@@ -273,6 +331,91 @@ class BM6Device(BaseMonitorDevice):
             )
             raise
 
+    def get_connection_state(self) -> ConnectionState:
+        """Get the current connection state of the device."""
+        if self.connection_pool is None:
+            return ConnectionState.DISCONNECTED
+        # Only return tracked state if the device has been tracked
+        if self.device_address not in self.connection_pool.device_states:
+            return ConnectionState.DISCONNECTED
+        return self.connection_pool.get_device_state(self.device_address)
+
+    def get_connection_state_history(
+        self,
+        limit: int = 10,
+    ) -> list[tuple[ConnectionState, float]]:
+        """Get the connection state history for this device."""
+        if self.connection_pool is None:
+            return []
+        # Only return history if the device has been tracked
+        if self.device_address not in self.connection_pool.device_states:
+            return []
+        return self.connection_pool.get_device_state_history(self.device_address, limit)
+
+    async def get_detailed_health(self) -> dict:
+        """Get detailed health information including connection state."""
+        if self.connection_pool is None:
+            return {
+                "device_address": self.device_address,
+                "current_state": ConnectionState.DISCONNECTED.name,
+                "connection_state": ConnectionState.DISCONNECTED.name,
+                "error": "No connection pool available",
+            }
+
+        health = await self.connection_pool.get_connection_health(self.device_address)
+        health["device_type"] = "BM6"
+        health["service_uuid"] = self.service_uuid
+        health["write_characteristic"] = self.write_characteristic_uuid
+        health["notify_characteristic"] = self.notify_characteristic_uuid
+
+        return health
+
+    async def force_reconnect(self, max_attempts: int | None = None) -> bool:
+        """
+        Force a reconnection to the device.
+
+        Args:
+            max_attempts: Maximum number of reconnection attempts
+
+        Returns:
+            True if reconnection was successful, False otherwise
+        """
+        if self.connection_pool is None:
+            self.logger.error("Cannot reconnect: no connection pool available")
+            return False
+
+        try:
+            # Disconnect first if connected
+            if self.connection_pool.is_connected(self.device_address):
+                await self.disconnect()
+
+            # Attempt reconnection
+            success = await self.connection_pool.reconnect(
+                self.device_address,
+                max_attempts,
+            )
+
+            if success:
+                # Re-setup notifications
+                await self.connection_pool.start_notifications(
+                    self.device_address,
+                    self.notify_characteristic_uuid,
+                    self._notification_handler,
+                )
+                self.logger.info(
+                    "Reconnection and notification setup successful for %s",
+                    self.device_address,
+                )
+
+        except Exception:
+            self.logger.exception(
+                "Error during forced reconnection for %s",
+                self.device_address,
+            )
+            return False
+        else:
+            return success
+
     async def request_voltage_temp(self) -> None:
         """Request voltage and temperature data from the BM6 device."""
         if self.connection_pool is None:
@@ -280,24 +423,33 @@ class BM6Device(BaseMonitorDevice):
                 "No connection pool available for BM6 voltage/temp request.",
             )
 
-        # Get the BLE connection from the connection pool
-        connection = await self.connection_pool.connect(self.device_address)
-        if connection is None:
-            raise RuntimeError(
-                f"No BLE connection available for device {self.device_address}",
+        # Verify we have an active connection
+        if not self.connection_pool.is_connected(self.device_address):
+            raise BM6ConnectionError(
+                f"No active BLE connection for device {self.device_address}",
+                device_address=self.device_address,
             )
 
         try:
             # Build the encrypted command
             command = build_voltage_temp_request()
             self.logger.debug(
-                "Voltage/temp request would be sent to BM6 device %s: %s",
+                "Sending voltage/temp request to BM6 device %s: %s",
                 self.device_address,
                 command.hex(),
             )
 
-            # Note: In a real implementation, this would write to the characteristic
-            # await connection.write_characteristic(self.write_characteristic_uuid, command)
+            # Send the encrypted command to the BM6 device
+            await self.connection_pool.write_characteristic(
+                self.device_address,
+                self.write_characteristic_uuid,
+                command,
+            )
+
+            self.logger.info(
+                "Voltage/temp request sent successfully to BM6 device %s",
+                self.device_address,
+            )
 
         except Exception:
             self.logger.exception(
@@ -313,22 +465,34 @@ class BM6Device(BaseMonitorDevice):
                 "No connection pool available for BM6 basic info request.",
             )
 
-        # Get the BLE connection from the connection pool
-        connection = await self.connection_pool.connect(self.device_address)
-        if connection is None:
-            raise RuntimeError(
-                f"No BLE connection available for device {self.device_address}",
+        # Verify we have an active connection
+        if not self.connection_pool.is_connected(self.device_address):
+            raise BM6ConnectionError(
+                f"No active BLE connection for device {self.device_address}",
+                device_address=self.device_address,
             )
 
         try:
-            # For now, just log the request since BLE operations are not fully implemented
-            # Note: BLE write operations will be implemented when BLEConnectionPool is enhanced
+            # Build the command (note: this uses legacy protocol, not encrypted)
             command = build_basic_info_request()
             self.logger.debug(
-                "Basic info request would be sent to BM6 device %s: %s",
+                "Sending basic info request to BM6 device %s: %s",
                 self.device_address,
                 command.hex(),
             )
+
+            # Send the command to the BM6 device
+            await self.connection_pool.write_characteristic(
+                self.device_address,
+                self.write_characteristic_uuid,
+                command,
+            )
+
+            self.logger.info(
+                "Basic info request sent successfully to BM6 device %s",
+                self.device_address,
+            )
+
         except Exception:
             self.logger.exception(
                 "Failed to request basic info from BM6 device %s",
@@ -343,22 +507,34 @@ class BM6Device(BaseMonitorDevice):
                 "No connection pool available for BM6 cell voltages request.",
             )
 
-        # Get the BLE connection from the connection pool
-        connection = await self.connection_pool.connect(self.device_address)
-        if connection is None:
-            raise RuntimeError(
-                f"No BLE connection available for device {self.device_address}",
+        # Verify we have an active connection
+        if not self.connection_pool.is_connected(self.device_address):
+            raise BM6ConnectionError(
+                f"No active BLE connection for device {self.device_address}",
+                device_address=self.device_address,
             )
 
         try:
-            # For now, just log the request since BLE operations are not fully implemented
-            # Note: BLE write operations will be implemented when BLEConnectionPool is enhanced
+            # Build the command (note: this uses legacy protocol, not encrypted)
             command = build_cell_voltages_request()
             self.logger.debug(
-                "Cell voltages request would be sent to BM6 device %s: %s",
+                "Sending cell voltages request to BM6 device %s: %s",
                 self.device_address,
                 command.hex(),
             )
+
+            # Send the command to the BM6 device
+            await self.connection_pool.write_characteristic(
+                self.device_address,
+                self.write_characteristic_uuid,
+                command,
+            )
+
+            self.logger.info(
+                "Cell voltages request sent successfully to BM6 device %s",
+                self.device_address,
+            )
+
         except Exception:
             self.logger.exception(
                 "Failed to request cell voltages from BM6 device %s",
@@ -366,7 +542,7 @@ class BM6Device(BaseMonitorDevice):
             )
             raise
 
-    def _notification_handler(self, sender: str, data: bytes) -> None:  # noqa: ARG002
+    def _notification_handler(self, sender: str, data: bytearray) -> None:  # noqa: ARG002
         """
         Handle notifications from the BM6 device.
 
@@ -374,27 +550,63 @@ class BM6Device(BaseMonitorDevice):
             sender: Characteristic UUID that sent the notification
             data: Raw notification data
         """
+        # Validate input data
+        if not data:
+            self.logger.warning(
+                "Received empty notification data from device %s",
+                self.device_address,
+            )
+            return
+
         try:
+            # Convert bytearray to bytes for parser compatibility
+            data_bytes = bytes(data)
+
+            # Log raw data for debugging at INFO level to help diagnose parsing issues
+            self.logger.info(
+                "BM6 raw notification from device %s (%d bytes): %s",
+                self.device_address,
+                len(data_bytes),
+                data_bytes.hex(),
+            )
+
             # Try to parse as real BM6 data first (with AES decryption)
-            parsed_data = self.parser.parse_real_bm6_data(data)
+            parsed_data = self.parser.parse_real_bm6_data(data_bytes)
             if parsed_data is None:
                 # Try to parse as a structured response
-                parsed_data = self.parser.parse_response(data)
+                parsed_data = self.parser.parse_response(data_bytes)
             if parsed_data is None:
                 # Fall back to legacy notification format
-                parsed_data = self.parser.parse_notification(data)
+                parsed_data = self.parser.parse_notification(data_bytes)
 
             if parsed_data:
                 self._latest_data.update(parsed_data)
+                # Log key data at INFO level for visibility, full data at DEBUG
+                if (
+                    "voltage" in parsed_data
+                    or "temperature" in parsed_data
+                    or "state_of_charge" in parsed_data
+                ):
+                    self.logger.info(
+                        "BM6 data received from device %s: voltage=%.2fV, temp=%.1f°C, SoC=%.1f%%",
+                        self.device_address,
+                        parsed_data.get("voltage", 0.0),
+                        parsed_data.get("temperature", 0.0),
+                        parsed_data.get("state_of_charge", 0.0),
+                    )
+                    # Signal that we received actual data (not just command acknowledgment)
+                    self._data_received_event.set()
                 self.logger.debug(
-                    "BM6 data updated for device %s: %s",
+                    "BM6 full data updated for device %s: %s",
                     self.device_address,
                     parsed_data,
                 )
             else:
                 self.logger.warning(
-                    "Failed to parse BM6 notification data from device %s",
+                    "Failed to parse BM6 notification data from device %s (received %d bytes): %s",
                     self.device_address,
+                    len(data),
+                    data_bytes.hex(),
                 )
 
         except Exception:

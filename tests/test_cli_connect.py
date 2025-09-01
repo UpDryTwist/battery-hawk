@@ -31,16 +31,16 @@ def clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def run_cli(args: list[str], config_dir: str) -> tuple[int, str, str]:
     """Run CLI command and return exit code, stdout, stderr."""
+    # subprocess.run is safe here because input is controlled and not untrusted (test context)
     env = os.environ.copy()
-    env["BATTERYHAWK_CONFIG_DIR"] = config_dir
-
-    result = subprocess.run(  # nosec S603 - args are controlled by tests, not user input
-        [sys.executable, "-m", "battery_hawk", *args],
-        check=False,
+    env["BATTERYHAWK_SYSTEM_BLUETOOTH_TEST_MODE"] = "true"
+    cmd = [sys.executable, "-m", "battery_hawk", "--config-dir", config_dir]
+    result = subprocess.run(
+        [*cmd, *args],
         capture_output=True,
         text=True,
+        check=False,
         env=env,
-        cwd=os.getcwd(),
     )
     return result.returncode, result.stdout, result.stderr
 

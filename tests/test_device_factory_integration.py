@@ -298,6 +298,14 @@ class TestDeviceFactoryEndToEnd:
         assert len(successful_readings) > 0
 
 
+class PerformanceTestConfig:
+    """Test configuration for performance tests."""
+
+    def __init__(self) -> None:
+        """Initialize test configuration with fast timeouts."""
+        self.data_wait_timeout = 0.1  # Very fast timeout for performance tests
+
+
 class TestDeviceFactoryPerformance:
     """Performance tests for device factory operations."""
 
@@ -305,6 +313,11 @@ class TestDeviceFactoryPerformance:
     def mock_connection_pool(self) -> MockBLEConnectionPool:
         """Create a mock connection pool for testing."""
         return MockBLEConnectionPool()
+
+    @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
 
     @pytest.fixture
     def device_factory(
@@ -318,6 +331,7 @@ class TestDeviceFactoryPerformance:
     async def test_concurrent_device_creation(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test creating multiple devices concurrently."""
         start_time = time.time()
@@ -328,7 +342,12 @@ class TestDeviceFactoryPerformance:
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
             task = asyncio.create_task(
-                self._create_and_read_device(device_factory, device_type, mac_address),
+                self._create_and_read_device(
+                    device_factory,
+                    device_type,
+                    mac_address,
+                    test_config,
+                ),
             )
             tasks.append(task)
 
@@ -345,7 +364,11 @@ class TestDeviceFactoryPerformance:
         assert len(successful_results) >= 8  # At least 80% success rate
 
     @pytest.mark.asyncio
-    async def test_rapid_device_creation(self, device_factory: DeviceFactory) -> None:
+    async def test_rapid_device_creation(
+        self,
+        device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
+    ) -> None:
         """Test creating devices rapidly in sequence."""
         start_time = time.time()
 
@@ -354,7 +377,7 @@ class TestDeviceFactoryPerformance:
         for i in range(20):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
 
         end_time = time.time()
@@ -371,6 +394,7 @@ class TestDeviceFactoryPerformance:
     async def test_auto_detection_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
         sample_advertisement_data: dict[str, Any],
     ) -> None:
         """Test performance of auto-detection with multiple advertisement data sets."""
@@ -398,9 +422,11 @@ class TestDeviceFactoryPerformance:
         device_factory: DeviceFactory,
         device_type: str,
         mac_address: str,
+        config: PerformanceTestConfig,
     ) -> Any:  # noqa: ANN401
         """Create a device and read data from it."""
-        device = device_factory.create_device(device_type, mac_address)
+        device = device_factory.create_device(device_type, mac_address, config)
+        await device.connect()
         return await device.read_data()
 
 

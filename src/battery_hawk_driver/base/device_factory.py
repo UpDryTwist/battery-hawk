@@ -62,6 +62,7 @@ class DeviceFactory:
         self,
         device_type: str,
         mac_address: str,
+        config: object = None,
         **kwargs: DeviceKwargs,
     ) -> DeviceType:
         """
@@ -70,6 +71,7 @@ class DeviceFactory:
         Args:
             device_type: Type of device ('BM6', 'BM2')
             mac_address: MAC address of the device
+            config: Configuration object to pass to device
             **kwargs: Additional arguments to pass to device constructor
 
         Returns:
@@ -91,12 +93,12 @@ class DeviceFactory:
         # Handle different constructor signatures
         if device_type == "BM6":
             # BM6Device expects (device_address, config, connection_pool, logger)
-            return device_class(mac_address, None, self.connection_pool, **kwargs)
+            return device_class(mac_address, config, self.connection_pool, **kwargs)
         if device_type == "BM2":
             # BM2Device expects (device_address, connection_pool, logger)
             # But it inherits from BaseMonitorDevice which expects (device_address, config, connection_pool, logger)
-            # So we need to pass None as config
-            return device_class(mac_address, None, self.connection_pool, **kwargs)
+            # So we need to pass config
+            return device_class(mac_address, config, self.connection_pool, **kwargs)
         # For any future device types, try the BM6 signature first
         try:
             return device_class(mac_address, None, self.connection_pool, **kwargs)
@@ -200,6 +202,7 @@ class DeviceFactory:
         self,
         mac_address: str,
         advertisement_data: dict[str, Any],
+        config: object = None,
         **kwargs: DeviceKwargs,
     ) -> DeviceType | None:
         """
@@ -208,6 +211,7 @@ class DeviceFactory:
         Args:
             mac_address: MAC address of the device
             advertisement_data: BLE advertisement data for auto-detection
+            config: Configuration object to pass to device
             **kwargs: Additional arguments to pass to device constructor
 
         Returns:
@@ -217,7 +221,7 @@ class DeviceFactory:
         if device_type is None:
             return None
 
-        return self.create_device(device_type, mac_address, **kwargs)
+        return self.create_device(device_type, mac_address, config, **kwargs)
 
     def get_supported_device_types(self) -> list[str]:
         """

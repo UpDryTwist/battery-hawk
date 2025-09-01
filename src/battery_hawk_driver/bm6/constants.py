@@ -16,18 +16,34 @@ BM6_AES_KEY = bytes(
     [108, 101, 97, 103, 101, 110, 100, 255, 254, 48, 49, 48, 48, 48, 48, 57],
 )
 
-# Real BM6 commands
-CMD_REQUEST_VOLTAGE_TEMP = "d15507"  # Request voltage and temperature data
+# Real BM6 commands - must be 16 bytes (32 hex chars) for AES encryption
+CMD_REQUEST_VOLTAGE_TEMP = (
+    "d1550700000000000000000000000000"  # Request voltage and temperature data
+)
 
 # Data parsing constants
 VOLTAGE_CONVERSION_FACTOR = 100.0  # Divide by 100 for volts
-TEMPERATURE_CONVERSION_FACTOR = 10.0  # Divide by 10 for Celsius
+TEMPERATURE_CONVERSION_FACTOR = (
+    10.0  # Divide by 10 for Celsius (decidegrees to degrees)
+)
 TEMPERATURE_SIGN_BIT = 0x01  # Bit indicating negative temperature
 
-# Response patterns
-VOLTAGE_PATTERN = "55aa"  # Start of voltage data
-TEMPERATURE_PATTERN = "55bb"  # Start of temperature data
-SOC_PATTERN = "55cc"  # Start of state of charge data
+# BM6 response format positions (in hex string)
+BM6_RESPONSE_PREFIX = "d15507"  # Response starts with this
+VOLTAGE_POSITION_START = 16  # Voltage data starts at position 16 in hex string
+VOLTAGE_POSITION_END = 20  # Voltage data ends at position 20 in hex string
+TEMPERATURE_SIGN_POSITION_START = 8  # Temperature sign at position 8-10
+TEMPERATURE_SIGN_POSITION_END = 10
+TEMPERATURE_POSITION_START = 12  # Temperature data at position 12-14
+TEMPERATURE_POSITION_END = 14
+SOC_POSITION_START = 14  # State of charge at position 14-16
+SOC_POSITION_END = 16
+
+# Wait time for data responses (configurable)
+DEFAULT_DATA_WAIT_TIMEOUT = 5.0  # seconds to wait for data response
+
+# AES encryption constants
+BM6_AES_BLOCK_SIZE = 16  # BM6 protocol uses exactly 16-byte blocks
 
 # Legacy protocol constants (kept for backward compatibility)
 CMD_REQUEST_BASIC_INFO = 0x03

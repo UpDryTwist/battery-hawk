@@ -6,19 +6,24 @@ import logging
 from typing import Any
 
 from .constants import (
+    BM6_RESPONSE_PREFIX,
     CAPACITY_CONVERSION_FACTOR,
     CELL_VOLTAGE_CONVERSION_FACTOR,
     CURRENT_CONVERSION_FACTOR,
     MIN_BASIC_INFO_LENGTH,
     MIN_CELL_VOLTAGES_LENGTH,
     MIN_NOTIFICATION_LENGTH,
-    SOC_PATTERN,
+    SOC_POSITION_END,
+    SOC_POSITION_START,
     SOFTWARE_VERSION_CONVERSION_FACTOR,
     TEMPERATURE_CONVERSION_FACTOR,
-    TEMPERATURE_PATTERN,
-    TEMPERATURE_SIGN_BIT,
+    TEMPERATURE_POSITION_END,
+    TEMPERATURE_POSITION_START,
+    TEMPERATURE_SIGN_POSITION_END,
+    TEMPERATURE_SIGN_POSITION_START,
     VOLTAGE_CONVERSION_FACTOR,
-    VOLTAGE_PATTERN,
+    VOLTAGE_POSITION_END,
+    VOLTAGE_POSITION_START,
 )
 from .crypto import BM6Crypto
 from .protocol import (
@@ -74,16 +79,39 @@ class BM6Parser:
             Parsed data dictionary or None if invalid
         """
         try:
+            self.logger.info(
+                "Attempting to decrypt BM6 data (%d bytes): %s",
+                len(data),
+                data.hex(),
+            )
+
             # Decrypt the data
             decrypted = self.crypto.decrypt(data)
+
+            self.logger.info(
+                "Decrypted BM6 data (%d bytes): %s",
+                len(decrypted),
+                decrypted.hex(),
+            )
 
             # Try to parse as real-time data first
             result = self._parse_real_time_data(decrypted)
             if result:
+                self.logger.info("Successfully parsed as real-time data: %s", result)
                 return result
 
             # Fall back to legacy parsing
-            return self.parse_notification(decrypted)
+            legacy_result = self.parse_notification(decrypted)
+            if legacy_result:
+                self.logger.info(
+                    "Successfully parsed as legacy notification: %s",
+                    legacy_result,
+                )
+                return legacy_result
+
+            # If we get here, all parsing methods failed
+            self.logger.info("Failed to parse decrypted data with any method")
+            return None  # noqa: TRY300
 
         except Exception:
             self.logger.exception("Failed to parse real BM6 data")
@@ -91,7 +119,7 @@ class BM6Parser:
 
     def _parse_real_time_data(self, data: bytes) -> dict[str, Any] | None:
         """
-        Parse real-time BM6 data with hex patterns.
+        Parse real-time BM6 data using correct BM6 format.
 
         Args:
             data: Decrypted data from device
@@ -99,82 +127,72 @@ class BM6Parser:
         Returns:
             Parsed data dictionary or None if invalid
         """
+        # Convert to hex string for parsing
+        hex_data = data.hex()
+        self.logger.info("Parsing BM6 real-time data from hex: %s", hex_data)
+
+        # Check if this is a BM6 response (should start with d15507)
+        if not hex_data.startswith(BM6_RESPONSE_PREFIX):
+            self.logger.info(
+                "Data does not start with BM6 response prefix (%s)",
+                BM6_RESPONSE_PREFIX,
+            )
+            return None
+
+        # Ensure we have enough data
+        if len(hex_data) < max(
+            VOLTAGE_POSITION_END,
+            TEMPERATURE_POSITION_END,
+            SOC_POSITION_END,
+        ):
+            self.logger.warning(
+                "Insufficient data length (%d chars) for BM6 parsing",
+                len(hex_data),
+            )
+            return None
+
         result: dict[str, Any] = {}
 
-        # Convert to hex string for pattern matching
-        hex_data = data.hex()
-
-        # Parse voltage (pattern: 55aa + 4 hex digits)
-        voltage_match = self._find_pattern(hex_data, VOLTAGE_PATTERN)
-        if voltage_match:
-            voltage_hex = voltage_match[4:8]  # 4 hex digits after pattern
-            try:
-                voltage_raw = int(voltage_hex, 16)
-                voltage = voltage_raw / VOLTAGE_CONVERSION_FACTOR
-                result["voltage"] = voltage
-            except ValueError:
-                self.logger.warning("Failed to parse voltage from hex: %s", voltage_hex)
-
-        # Parse temperature (pattern: 55bb + 4 hex digits)
-        temp_match = self._find_pattern(hex_data, TEMPERATURE_PATTERN)
-        if temp_match:
-            temp_hex = temp_match[4:8]  # 4 hex digits after pattern
-            try:
-                temp_raw = int(temp_hex, 16)
-
-                # Check for negative temperature sign bit
-                if temp_raw & TEMPERATURE_SIGN_BIT:
-                    # Negative temperature
-                    temp_raw = temp_raw & 0xFFFE  # Clear sign bit
-                    temperature = -(temp_raw / TEMPERATURE_CONVERSION_FACTOR)
-                else:
-                    # Positive temperature
-                    temperature = temp_raw / TEMPERATURE_CONVERSION_FACTOR
-
-                result["temperature"] = temperature
-            except ValueError:
-                self.logger.warning(
-                    "Failed to parse temperature from hex: %s",
-                    temp_hex,
-                )
-
-        # Parse state of charge (pattern: 55cc + 2 hex digits)
-        soc_match = self._find_pattern(hex_data, SOC_PATTERN)
-        if soc_match:
-            soc_hex = soc_match[4:6]  # 2 hex digits after pattern
-            try:
-                soc_raw = int(soc_hex, 16)
-                state_of_charge = soc_raw  # Already in percentage (0-100)
-                result["state_of_charge"] = state_of_charge
-            except ValueError:
-                self.logger.warning("Failed to parse SOC from hex: %s", soc_hex)
-
-        return result if result else None
-
-    def _find_pattern(self, hex_data: str, pattern: str) -> str | None:
-        """
-        Find a pattern in hex data.
-
-        Args:
-            hex_data: Hex string data
-            pattern: Pattern to find
-
-        Returns:
-            Found pattern with data or None
-        """
         try:
-            index = hex_data.find(pattern)
-            if index != -1:
-                # Return pattern + next 4 characters (for voltage/temp) or 2 (for SOC)
-                data_length = (
-                    4 if pattern in [VOLTAGE_PATTERN, TEMPERATURE_PATTERN] else 2
-                )
-                end_index = index + len(pattern) + data_length
-                if end_index <= len(hex_data):
-                    return hex_data[index:end_index]
-        except (ValueError, IndexError) as exc:
-            self.logger.debug("Error finding pattern %s: %s", pattern, exc)
-        return None
+            # Parse voltage (position 14-18 in hex string)
+            voltage_hex = hex_data[VOLTAGE_POSITION_START:VOLTAGE_POSITION_END]
+            voltage_raw = int(voltage_hex, 16)
+            voltage = voltage_raw / VOLTAGE_CONVERSION_FACTOR
+            result["voltage"] = voltage
+            self.logger.info("Parsed voltage: %s -> %.2fV", voltage_hex, voltage)
+
+            # Parse temperature (position 8-10, with sign at 6-8)
+            temp_sign_hex = hex_data[
+                TEMPERATURE_SIGN_POSITION_START:TEMPERATURE_SIGN_POSITION_END
+            ]
+            temp_hex = hex_data[TEMPERATURE_POSITION_START:TEMPERATURE_POSITION_END]
+
+            temperature_raw = int(temp_hex, 16)
+            temperature_sign = int(temp_sign_hex, 16)
+
+            # For real-time data, temperature is already in degrees Celsius (not decidegrees)
+            temperature = float(temperature_raw)
+            temperature = -temperature if temperature_sign == 1 else temperature
+
+            result["temperature"] = temperature
+            self.logger.info(
+                "Parsed temperature: sign=%s, value=%s -> %.1f°C",
+                temp_sign_hex,
+                temp_hex,
+                temperature,
+            )
+
+            # Parse state of charge (position 12-14)
+            soc_hex = hex_data[SOC_POSITION_START:SOC_POSITION_END]
+            soc = int(soc_hex, 16)
+            result["state_of_charge"] = soc
+            self.logger.info("Parsed SoC: %s -> %d%%", soc_hex, soc)
+
+        except (ValueError, IndexError) as e:
+            self.logger.warning("Failed to parse BM6 real-time data: %s", e)
+            return None
+        else:
+            return result
 
     @staticmethod
     def _parse_basic_info(data: bytes) -> dict[str, Any] | None:

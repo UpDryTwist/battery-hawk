@@ -5,7 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from src.battery_hawk_driver.bm6.crypto import BM6Crypto
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +131,13 @@ class MockBLEClient:
         await asyncio.sleep(0.05)  # Simulate write delay
         self.logger.debug("Mock write to %s: %s", char_uuid, data.hex())
 
+        # For BM6 devices, simulate a response notification when a command is written
+        if self.device_type == "BM6" and hasattr(self, "_notification_callback"):
+            # Simulate BM6 response data after a short delay
+            task = asyncio.create_task(self._simulate_bm6_response())
+            # Store task reference to prevent garbage collection
+            self._response_task = task
+
     def set_read_failure_rate(self, rate: float) -> None:
         """
         Set the rate of simulated read failures.
@@ -134,6 +146,76 @@ class MockBLEClient:
             rate: Failure rate between 0.0 and 1.0
         """
         self._read_failure_rate = max(0.0, min(1.0, rate))
+
+    async def start_notify(
+        self,
+        char_uuid: str,
+        callback: Callable[[str, bytearray], None],
+    ) -> None:
+        """
+        Mock starting notifications on a characteristic.
+
+        Args:
+            char_uuid: Characteristic UUID to start notifications on
+            callback: Callback function to call when notifications are received
+        """
+        if not self.connected:
+            raise ConnectionError("Device not connected")
+
+        self._notification_callback = callback
+        self.logger.debug("Mock notifications started on %s", char_uuid)
+
+    async def stop_notify(self, char_uuid: str) -> None:
+        """
+        Mock stopping notifications on a characteristic.
+
+        Args:
+            char_uuid: Characteristic UUID to stop notifications on
+        """
+        if hasattr(self, "_notification_callback"):
+            delattr(self, "_notification_callback")
+        self.logger.debug("Mock notifications stopped on %s", char_uuid)
+
+    async def _simulate_bm6_response(self) -> None:
+        """Simulate a BM6 device response after a command is written."""
+        await asyncio.sleep(0.1)  # Small delay to simulate device processing
+
+        if hasattr(self, "_notification_callback") and self._notification_callback:
+            # Generate mock BM6 response data in the correct format
+            unencrypted_data = bytes(
+                [
+                    0xD1,
+                    0x55,
+                    0x07,  # BM6 response prefix
+                    0x00,  # Status
+                    0x00,  # Temperature sign
+                    0x00,  # Skip byte
+                    0x14,  # Temperature (20°C)
+                    0x64,  # SOC (100%)
+                    0x05,
+                    0xDC,  # Voltage (15.00V)
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,  # Padding
+                ],
+            )
+
+            # Encrypt the data using BM6 crypto for realistic simulation
+            try:
+                crypto = BM6Crypto()
+                response_data = crypto.encrypt(unencrypted_data)
+            except (ImportError, AttributeError):
+                # Fall back to unencrypted data if crypto fails
+                response_data = unencrypted_data
+
+            try:
+                self._notification_callback("", bytearray(response_data))
+                self.logger.debug("Simulated BM6 response: %s", response_data.hex())
+            except (TypeError, AttributeError) as e:
+                self.logger.warning("Failed to send mock notification: %s", e)
 
 
 class MockBLEDevice:
@@ -260,6 +342,105 @@ class MockBLEConnectionPool:
             await self.release(mac_address)
         self.connections.clear()
         self.logger.info("All mock connections disconnected")
+
+    def is_connected(self, mac_address: str) -> bool:
+        """
+        Check if device is connected.
+
+        Args:
+            mac_address: MAC address of the device
+
+        Returns:
+            True if device is connected, False otherwise
+        """
+        if mac_address in self.connections:
+            return self.connections[mac_address].connected
+        return False
+
+    async def write_characteristic(
+        self,
+        mac_address: str,
+        char_uuid: str,
+        data: bytes,
+    ) -> None:
+        """
+        Mock writing to GATT characteristic.
+
+        Args:
+            mac_address: MAC address of the device
+            char_uuid: Characteristic UUID to write to
+            data: Data to write
+        """
+        if mac_address in self.connections:
+            client = self.connections[mac_address]
+            await client.write_gatt_char(char_uuid, data)
+            self.logger.info(
+                "Mock write to %s characteristic %s: %s",
+                mac_address,
+                char_uuid,
+                data.hex(),
+            )
+
+    async def start_notifications(
+        self,
+        mac_address: str,
+        char_uuid: str,
+        callback: Callable[[str, bytearray], None],
+    ) -> None:
+        """
+        Mock starting notifications for a GATT characteristic.
+
+        Args:
+            mac_address: MAC address of the device
+            char_uuid: Characteristic UUID to subscribe to
+            callback: Function to call when notifications are received
+        """
+        if mac_address in self.connections:
+            client = self.connections[mac_address]
+            await client.start_notify(char_uuid, callback)
+            self.logger.info(
+                "Mock notifications started for %s characteristic %s",
+                mac_address,
+                char_uuid,
+            )
+
+    async def stop_notifications(
+        self,
+        mac_address: str,
+        char_uuid: str,
+    ) -> None:
+        """
+        Mock stopping notifications for a GATT characteristic.
+
+        Args:
+            mac_address: MAC address of the device
+            char_uuid: Characteristic UUID to stop notifications on
+        """
+        if mac_address in self.connections:
+            client = self.connections[mac_address]
+            await client.stop_notify(char_uuid)
+            self.logger.info(
+                "Mock notifications stopped for %s characteristic %s",
+                mac_address,
+                char_uuid,
+            )
+
+    async def disconnect(self, mac_address: str) -> None:
+        """
+        Mock disconnecting from a device.
+
+        Args:
+            mac_address: MAC address of the device to disconnect from
+        """
+        if mac_address in self.connections:
+            client = self.connections[mac_address]
+            client.connected = False
+            self.logger.info("Mock device disconnected: %s", mac_address)
+        else:
+            self.logger.warning(
+                "Attempted to disconnect unknown device: %s",
+                mac_address,
+            )
 
 
 class MockBLEDiscoveryService:

@@ -11,6 +11,15 @@ import pytest
 from src.battery_hawk_driver.base.device_factory import DeviceFactory
 from tests.support.mocks.test_mock_ble_devices import MockBLEConnectionPool
 
+
+class PerformanceTestConfig:
+    """Test configuration for performance tests."""
+
+    def __init__(self) -> None:
+        """Initialize test configuration with fast timeouts."""
+        self.data_wait_timeout = 0.1  # Very fast timeout for performance tests
+
+
 # Type alias for test devices
 TestDevice = "BM2Device | BM6Device"
 
@@ -24,6 +33,11 @@ class TestPerformanceThresholds:
         return MockBLEConnectionPool()
 
     @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
+
+    @pytest.fixture
     def device_factory(
         self,
         mock_connection_pool: MockBLEConnectionPool,
@@ -35,6 +49,7 @@ class TestPerformanceThresholds:
     async def test_device_creation_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test that device creation meets performance thresholds."""
         start_time = time.time()
@@ -44,7 +59,7 @@ class TestPerformanceThresholds:
         for i in range(10):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
 
         end_time = time.time()
@@ -59,11 +74,15 @@ class TestPerformanceThresholds:
     async def test_device_data_reading_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test that device data reading meets performance thresholds."""
         # Create a device
-        device = device_factory.create_device("BM6", "AA:BB:CC:DD:EE:FF")
+        device = device_factory.create_device("BM6", "AA:BB:CC:DD:EE:FF", test_config)
         assert device is not None
+
+        # Connect the device first
+        await device.connect()
 
         start_time = time.time()
 
@@ -85,6 +104,7 @@ class TestPerformanceThresholds:
     async def test_concurrent_operations_meet_thresholds(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test that concurrent operations meet performance thresholds."""
         # Create multiple devices
@@ -92,8 +112,11 @@ class TestPerformanceThresholds:
         for i in range(5):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
+
+        # Connect all devices first
+        await asyncio.gather(*[device.connect() for device in devices])
 
         start_time = time.time()
 
@@ -120,15 +143,16 @@ class TestPerformanceThresholds:
         # Should complete within 2 seconds
         assert total_duration < 2.0
 
-        # Each individual operation should complete within 500ms
+        # Each individual operation should complete within 200ms (with 0.1s timeout)
         for device_durations in all_durations:
             for duration in device_durations:
-                assert duration < 0.5
+                assert duration < 0.2
 
     @pytest.mark.asyncio
     async def test_auto_detection_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test that auto-detection meets performance thresholds."""
         # Sample advertisement data
@@ -180,6 +204,11 @@ class TestScalabilityBenchmarks:
         return MockBLEConnectionPool()
 
     @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
+
+    @pytest.fixture
     def device_factory(
         self,
         mock_connection_pool: MockBLEConnectionPool,
@@ -191,6 +220,7 @@ class TestScalabilityBenchmarks:
     async def test_large_device_creation_scalability(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test scalability of creating large numbers of devices."""
         start_time = time.time()
@@ -200,7 +230,7 @@ class TestScalabilityBenchmarks:
         for i in range(100):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
 
         end_time = time.time()
@@ -215,6 +245,7 @@ class TestScalabilityBenchmarks:
     async def test_concurrent_device_operations_scalability(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test scalability of concurrent operations on many devices."""
         # Create 20 devices
@@ -222,8 +253,11 @@ class TestScalabilityBenchmarks:
         for i in range(20):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
+
+        # Connect all devices first
+        await asyncio.gather(*[device.connect() for device in devices])
 
         start_time = time.time()
 
@@ -248,6 +282,7 @@ class TestScalabilityBenchmarks:
     async def test_mixed_operation_scalability(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test scalability of mixed operations (creation + reading)."""
         start_time = time.time()
@@ -261,8 +296,15 @@ class TestScalabilityBenchmarks:
                 device_id = batch * 10 + i
                 mac_address = f"AA:BB:CC:DD:EE:{device_id:02X}"
                 device_type = "BM6" if device_id % 2 == 0 else "BM2"
-                device = device_factory.create_device(device_type, mac_address)
+                device = device_factory.create_device(
+                    device_type,
+                    mac_address,
+                    test_config,
+                )
                 batch_devices.append(device)
+
+            # Connect all batch devices first
+            await asyncio.gather(*[device.connect() for device in batch_devices])
 
             # Read data from all devices in this batch
             batch_readings = await asyncio.gather(
@@ -288,6 +330,11 @@ class TestFailureHandlingPerformance:
         return MockBLEConnectionPool()
 
     @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
+
+    @pytest.fixture
     def device_factory(
         self,
         mock_connection_pool: MockBLEConnectionPool,
@@ -299,11 +346,15 @@ class TestFailureHandlingPerformance:
     async def test_high_failure_rate_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test performance when many operations fail."""
         # Create a device that will have high failure rate
-        device = device_factory.create_device("BM6", "FF:FF:FF:FF:FF:FF")
+        device = device_factory.create_device("BM6", "FF:FF:FF:FF:FF:FF", test_config)
         assert device is not None
+
+        # Connect the device first
+        await device.connect()
 
         # Override the read_data method to simulate failures
         original_read_data = device.read_data
@@ -348,11 +399,15 @@ class TestFailureHandlingPerformance:
     async def test_timeout_handling_performance(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test performance when operations timeout."""
         # Create a device
-        device = device_factory.create_device("BM6", "AA:BB:CC:DD:EE:FF")
+        device = device_factory.create_device("BM6", "AA:BB:CC:DD:EE:FF", test_config)
         assert device is not None
+
+        # Connect the device first
+        await device.connect()
 
         # Override the read_data method to simulate timeouts
         original_read_data = device.read_data
@@ -404,6 +459,11 @@ class TestMemoryUsageBenchmarks:
         return MockBLEConnectionPool()
 
     @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
+
+    @pytest.fixture
     def device_factory(
         self,
         mock_connection_pool: MockBLEConnectionPool,
@@ -415,6 +475,7 @@ class TestMemoryUsageBenchmarks:
     async def test_memory_usage_with_many_devices(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test memory usage when creating many devices."""
         # Create 100 devices
@@ -422,8 +483,11 @@ class TestMemoryUsageBenchmarks:
         for i in range(100):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
+
+        # Connect all devices first
+        await asyncio.gather(*[device.connect() for device in devices])
 
         # Perform operations on all devices
         readings = await asyncio.gather(
@@ -443,6 +507,7 @@ class TestMemoryUsageBenchmarks:
     async def test_memory_cleanup_after_operations(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test that memory is properly cleaned up after operations."""
         # Create devices and perform operations
@@ -450,8 +515,11 @@ class TestMemoryUsageBenchmarks:
         for i in range(50):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
+
+        # Connect all devices first
+        await asyncio.gather(*[device.connect() for device in devices])
 
         # Perform operations
         readings = await asyncio.gather(
@@ -479,6 +547,11 @@ class TestConcurrencyBenchmarks:
         return MockBLEConnectionPool()
 
     @pytest.fixture
+    def test_config(self) -> PerformanceTestConfig:
+        """Create test configuration for performance tests."""
+        return PerformanceTestConfig()
+
+    @pytest.fixture
     def device_factory(
         self,
         mock_connection_pool: MockBLEConnectionPool,
@@ -490,6 +563,7 @@ class TestConcurrencyBenchmarks:
     async def test_concurrent_device_creation(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test concurrent device creation performance."""
         start_time = time.time()
@@ -499,7 +573,7 @@ class TestConcurrencyBenchmarks:
             """Create a single device."""
             mac_address = f"AA:BB:CC:DD:EE:{device_id:02X}"
             device_type = "BM6" if device_id % 2 == 0 else "BM2"
-            return device_factory.create_device(device_type, mac_address)
+            return device_factory.create_device(device_type, mac_address, test_config)
 
         # Create 20 devices concurrently
         devices = await asyncio.gather(*[create_device(i) for i in range(20)])
@@ -513,15 +587,22 @@ class TestConcurrencyBenchmarks:
         assert all(device is not None for device in devices)
 
     @pytest.mark.asyncio
-    async def test_concurrent_data_reading(self, device_factory: DeviceFactory) -> None:
+    async def test_concurrent_data_reading(
+        self,
+        device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
+    ) -> None:
         """Test concurrent data reading performance."""
         # Create devices first
         devices = []
         for i in range(10):
             mac_address = f"AA:BB:CC:DD:EE:{i:02X}"
             device_type = "BM6" if i % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
             devices.append(device)
+
+        # Connect all devices first
+        await asyncio.gather(*[device.connect() for device in devices])
 
         start_time = time.time()
 
@@ -545,6 +626,7 @@ class TestConcurrencyBenchmarks:
     async def test_mixed_concurrent_operations(
         self,
         device_factory: DeviceFactory,
+        test_config: PerformanceTestConfig,
     ) -> None:
         """Test mixed concurrent operations (creation + reading)."""
         start_time = time.time()
@@ -554,7 +636,8 @@ class TestConcurrencyBenchmarks:
             """Create a device and read data from it."""
             mac_address = f"AA:BB:CC:DD:EE:{device_id:02X}"
             device_type = "BM6" if device_id % 2 == 0 else "BM2"
-            device = device_factory.create_device(device_type, mac_address)
+            device = device_factory.create_device(device_type, mac_address, test_config)
+            await device.connect()
             return await device.read_data()
 
         # Perform 15 concurrent create-and-read operations

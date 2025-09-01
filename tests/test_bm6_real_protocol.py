@@ -3,10 +3,6 @@
 from battery_hawk_driver.bm6.constants import (
     BM6_AES_KEY,
     CMD_REQUEST_VOLTAGE_TEMP,
-    SOC_PATTERN,
-    TEMPERATURE_PATTERN,
-    TEMPERATURE_SIGN_BIT,
-    VOLTAGE_PATTERN,
 )
 from battery_hawk_driver.bm6.crypto import BM6Crypto
 from battery_hawk_driver.bm6.parser import BM6Parser
@@ -28,7 +24,8 @@ class TestBM6Crypto:
     def test_encrypt_decrypt(self) -> None:
         """Test AES encryption and decryption."""
         crypto = BM6Crypto()
-        test_data = b"test data"
+        # Use 16-byte test data since BM6 protocol works with 16-byte blocks
+        test_data = b"test data\x00\x00\x00\x00\x00\x00\x00"  # Pad to 16 bytes
 
         encrypted = crypto.encrypt(test_data)
         decrypted = crypto.decrypt(encrypted)
@@ -70,90 +67,62 @@ class TestBM6Parser:
         """Set up parser for tests."""
         self.parser = BM6Parser()
 
-    def test_parse_voltage_pattern(self) -> None:
-        """Test parsing voltage from hex pattern."""
-        # Simulate voltage data: 55aa + 4 hex digits (e.g., 55aa05dc = 15.00V)
-        # 0x05dc = 1500, divided by 100 = 15.00V
-        test_data = bytes.fromhex("55aa05dc")
-        hex_data = test_data.hex()
+    def test_parse_bm6_real_time_data_with_values(self) -> None:
+        """Test parsing BM6 real-time data with actual values."""
+        # Simulate BM6 response: d15507 + status + temp_sign + skip + temp + state + voltage + padding
+        # d15507 = command response
+        # 00 = status (normal)
+        # 00 = temperature sign (positive)
+        # 00 = skip byte
+        # 14 = temperature (20°C)
+        # 64 = state of charge (100%)
+        # 05dc = voltage (15.00V)
+        test_hex = "d15507000000146405dc0000000000"
+        test_data = bytes.fromhex(test_hex)
 
-        voltage_match = self.parser._find_pattern(hex_data, VOLTAGE_PATTERN)
-        assert voltage_match == "55aa05dc"
+        result = self.parser._parse_real_time_data(test_data)
 
-        # Parse the voltage
-        voltage_hex = voltage_match[4:8]
-        voltage_raw = int(voltage_hex, 16)
-        voltage = voltage_raw / 100.0  # VOLTAGE_CONVERSION_FACTOR
+        assert result is not None
+        assert result["voltage"] == 15.00  # 0x05dc / 100
+        assert result["temperature"] == 20  # 0x14 with positive sign
+        assert result["state_of_charge"] == 100  # 0x64
 
-        assert voltage == 15.00
+    def test_parse_bm6_real_time_data_negative_temp(self) -> None:
+        """Test parsing BM6 real-time data with negative temperature."""
+        # d15507 + status + temp_sign + temp + state + voltage + padding
+        # 01 = temperature sign (negative)
+        # 0a = temperature (10°C, but negative = -10°C)
+        test_hex = "d155070001050a32012c0000000000"
+        test_data = bytes.fromhex(test_hex)
 
-    def test_parse_temperature_positive(self) -> None:
-        """Test parsing positive temperature."""
-        # Simulate temperature data: 55bb + 4 hex digits (e.g., 55bb00c8 = 20.0°C)
-        # 0x00c8 = 200, divided by 10 = 20.0°C
-        test_data = bytes.fromhex("55bb00c8")
-        hex_data = test_data.hex()
+        result = self.parser._parse_real_time_data(test_data)
 
-        temp_match = self.parser._find_pattern(hex_data, TEMPERATURE_PATTERN)
-        assert temp_match == "55bb00c8"
+        assert result is not None
+        assert result["temperature"] == -10  # 0x0a with negative sign
+        assert result["state_of_charge"] == 50  # 0x32
+        assert result["voltage"] == 3.00  # 0x012c / 100
 
-        # Parse the temperature
-        temp_hex = temp_match[4:8]
-        temp_raw = int(temp_hex, 16)
+    def test_parse_bm6_invalid_prefix(self) -> None:
+        """Test that data without BM6 prefix is rejected."""
+        # Invalid prefix (not d15507)
+        test_hex = "ff55070000146405dc000000000000"
+        test_data = bytes.fromhex(test_hex)
 
-        # Check for negative temperature sign bit
-        if temp_raw & TEMPERATURE_SIGN_BIT:
-            temp_raw = temp_raw & 0xFFFE  # Clear sign bit
-            temperature = -(temp_raw / 10.0)  # TEMPERATURE_CONVERSION_FACTOR
-        else:
-            temperature = temp_raw / 10.0
+        result = self.parser._parse_real_time_data(test_data)
 
-        assert temperature == 20.0
-
-    def test_parse_temperature_negative(self) -> None:
-        """Test parsing negative temperature."""
-        # Simulate negative temperature data: 55bb + 4 hex digits with sign bit
-        # 55bb00c9 = 200 with sign bit set = -20.0°C
-        test_data = bytes.fromhex("55bb00c9")
-        hex_data = test_data.hex()
-
-        temp_match = self.parser._find_pattern(hex_data, TEMPERATURE_PATTERN)
-        assert temp_match == "55bb00c9"
-
-        # Parse the temperature
-        temp_hex = temp_match[4:8]
-        temp_raw = int(temp_hex, 16)
-
-        # Check for negative temperature sign bit
-        if temp_raw & TEMPERATURE_SIGN_BIT:
-            temp_raw = temp_raw & 0xFFFE  # Clear sign bit
-            temperature = -(temp_raw / 10.0)
-        else:
-            temperature = temp_raw / 10.0
-
-        assert temperature == -20.0
-
-    def test_parse_soc(self) -> None:
-        """Test parsing state of charge."""
-        # Simulate SOC data: 55cc + 2 hex digits (e.g., 55cc64 = 100%)
-        test_data = bytes.fromhex("55cc64")
-        hex_data = test_data.hex()
-
-        soc_match = self.parser._find_pattern(hex_data, SOC_PATTERN)
-        assert soc_match == "55cc64"
-
-        # Parse the SOC
-        soc_hex = soc_match[4:6]
-        soc_raw = int(soc_hex, 16)
-        state_of_charge = soc_raw  # Already in percentage
-
-        assert state_of_charge == 100
+        assert result is None
 
     def test_parse_real_time_data(self) -> None:
         """Test parsing complete real-time data."""
-        # Simulate complete data with voltage, temperature, and SOC
-        # 55aa05dc = 15.00V, 55bb00c8 = 20.0°C, 55cc64 = 100%
-        test_data = bytes.fromhex("55aa05dc55bb00c855cc64")
+        # Simulate BM6 response with voltage=15.00V, temperature=20°C, SOC=100%
+        # d15507 = command response
+        # 00 = status (normal)
+        # 00 = temperature sign (positive)
+        # 00 = skip byte
+        # 14 = temperature (20°C)
+        # 64 = state of charge (100%)
+        # 05dc = voltage (15.00V)
+        test_data = bytes.fromhex("d15507000000146405dc0000000000")
 
         result = self.parser._parse_real_time_data(test_data)
 
@@ -164,8 +133,8 @@ class TestBM6Parser:
 
     def test_parse_real_bm6_data_with_encryption(self) -> None:
         """Test parsing encrypted BM6 data."""
-        # Create test data
-        test_data = bytes.fromhex("55aa05dc55bb00c855cc64")
+        # Create test data in correct BM6 format
+        test_data = bytes.fromhex("d15507000000146405dc0000000000")
 
         # Encrypt the data
         crypto = BM6Crypto()
@@ -175,6 +144,9 @@ class TestBM6Parser:
         result = self.parser.parse_real_bm6_data(encrypted_data)
 
         assert result is not None
+        assert result["voltage"] == 15.00
+        assert result["temperature"] == 20.0
+        assert result["state_of_charge"] == 100
         assert result["voltage"] == 15.00
         assert result["temperature"] == 20.0
         assert result["state_of_charge"] == 100

@@ -425,7 +425,12 @@ async def _connect_and_retrieve_info(
     connected_info = {}
 
     # Initialize connection pool and device factory
-    connection_pool = BLEConnectionPool(config_manager)
+    bluetooth_config = config_manager.get_config("system").get("bluetooth", {})
+    test_mode = bluetooth_config.get("test_mode", False) or bluetooth_config.get(
+        "test",
+        {},
+    ).get("mode", False)
+    connection_pool = BLEConnectionPool(config_manager, test_mode=test_mode)
     device_factory = DeviceFactory(connection_pool)
 
     for mac, device_info in discovered_devices.items():
@@ -531,7 +536,14 @@ async def connect_to_device(
     try:
         # Auto-detect device type if needed
         if device_type == "auto":
-            device_factory = DeviceFactory(BLEConnectionPool(config_manager))
+            bluetooth_config = config_manager.get_config("system").get("bluetooth", {})
+            test_mode = bluetooth_config.get(
+                "test_mode",
+                False,
+            ) or bluetooth_config.get("test", {}).get("mode", False)
+            device_factory = DeviceFactory(
+                BLEConnectionPool(config_manager, test_mode=test_mode),
+            )
             detected_type = await _auto_detect_device_type(
                 mac_address,
                 device_factory,
@@ -546,7 +558,12 @@ async def connect_to_device(
             device_type = detected_type
 
         # Create device instance
-        connection_pool = BLEConnectionPool(config_manager)
+        bluetooth_config = config_manager.get_config("system").get("bluetooth", {})
+        test_mode = bluetooth_config.get("test_mode", False) or bluetooth_config.get(
+            "test",
+            {},
+        ).get("mode", False)
+        connection_pool = BLEConnectionPool(config_manager, test_mode=test_mode)
         device_factory = DeviceFactory(connection_pool)
         device = device_factory.create_device(device_type, mac_address)
 
