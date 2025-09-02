@@ -2,6 +2,7 @@
 "tests/*" = [
     "S101", # Use of assert
     "S101", # Use of assert
+    "ANN401", # Dynamically typed expressions
     "ARG001", # Unused function argument (particularly for fixtures)
     "ARG002", # Unused method argument
     "ARG003", # Unused class method argument
@@ -37,6 +38,7 @@ ignore = [
     "TD003", # TODOs must have issue link
     "FIX002", # Allow TODOs in files
     "TID252", # Allow relative imports
+    "ANN401", # Dynamically typed expressions
 ]
 
 select = [

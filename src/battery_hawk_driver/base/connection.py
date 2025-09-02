@@ -167,7 +167,7 @@ class BLEConnectionPool:
 
     def __init__(
         self,
-        config_manager: Any,  # noqa: ANN401
+        config_manager: Any,
         cleanup_interval: float = 5.0,
         *,
         test_mode: bool = False,

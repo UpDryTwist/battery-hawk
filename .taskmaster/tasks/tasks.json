@@ -244,7 +244,7 @@
           2,
           5
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -295,7 +295,7 @@
               "6.2"
             ],
             "details": "Implement a robust error handling system that detects various failure scenarios (connection loss, write failures, query timeouts). Create a reconnection mechanism with exponential backoff. Implement a temporary buffer for storing readings during database outages, with automatic replay once connection is restored. Add health check method to periodically verify database connectivity. Implement detailed error logging with appropriate severity levels.",
-            "status": "in-progress",
+            "status": "done",
             "testStrategy": "Test recovery from simulated connection losses. Verify data buffering works during outages. Test automatic replay of buffered data. Verify exponential backoff logic during reconnection attempts. Test health check functionality."
           }
         ]
@@ -310,8 +310,64 @@
         "dependencies": [
           5
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create API module structure and Flask application setup",
+            "description": "Set up the basic API module structure in battery_hawk/api/ and implement the Flask application with AsyncIO integration. This includes creating the BatteryHawkAPI class with initialization and route setup.",
+            "dependencies": [],
+            "details": "1. Create directory structure in battery_hawk/api/\n2. Create __init__.py and api.py files\n3. Implement BatteryHawkAPI class with constructor that accepts config_manager and core_engine\n4. Set up Flask application instance\n5. Implement setup_routes method to register all API endpoints\n6. Create async thread function for API serving\n7. Implement basic error handling middleware",
+            "status": "done",
+            "testStrategy": "1. Test API initialization with mock config and core engine\n2. Verify route registration is complete\n3. Test async thread creation and shutdown\n4. Verify Flask app configuration"
+          },
+          {
+            "id": 2,
+            "title": "Implement device management endpoints",
+            "description": "Implement all device-related API endpoints including get_devices, get_device, configure_device, update_device, and delete_device with JSON-API compliant responses.",
+            "dependencies": [
+              "7.1"
+            ],
+            "details": "1. Implement get_devices() to return all devices in JSON-API format\n2. Implement get_device(mac) to return specific device details\n3. Implement configure_device(mac) to handle device configuration\n4. Implement update_device(mac) for partial updates\n5. Implement delete_device(mac) for device removal\n6. Ensure all responses follow JSON-API specification with proper data formatting\n7. Add request validation for POST and PATCH methods",
+            "status": "done",
+            "testStrategy": "1. Unit test each device endpoint with mock requests\n2. Verify JSON-API compliance in responses\n3. Test error handling with invalid device IDs\n4. Test validation of request payloads\n5. Verify proper interaction with config_manager"
+          },
+          {
+            "id": 3,
+            "title": "Implement vehicle management endpoints",
+            "description": "Implement all vehicle-related API endpoints including get_vehicles, get_vehicle, create_vehicle, update_vehicle, and delete_vehicle with JSON-API compliant responses.",
+            "dependencies": [
+              "7.1"
+            ],
+            "details": "1. Implement get_vehicles() to return all vehicles in JSON-API format\n2. Implement get_vehicle(id) to return specific vehicle details\n3. Implement create_vehicle() to add new vehicles\n4. Implement update_vehicle(id) for partial updates\n5. Implement delete_vehicle(id) for vehicle removal\n6. Ensure all responses follow JSON-API specification\n7. Add request validation for POST and PATCH methods\n8. Implement relationship handling between vehicles and devices",
+            "status": "done",
+            "testStrategy": "1. Unit test each vehicle endpoint with mock requests\n2. Verify JSON-API compliance in responses\n3. Test error handling with invalid vehicle IDs\n4. Test validation of request payloads\n5. Verify proper relationship handling between vehicles and devices"
+          },
+          {
+            "id": 4,
+            "title": "Implement readings and system endpoints",
+            "description": "Implement the readings endpoint for retrieving device data and system endpoints for configuration and status management.",
+            "dependencies": [
+              "7.1"
+            ],
+            "details": "1. Implement get_readings(mac) to return device readings with pagination support\n2. Implement get_system_config() to return current system configuration\n3. Implement update_system_config() for modifying system settings\n4. Implement get_system_status() to return current system status\n5. Add filtering and sorting options for readings endpoint\n6. Implement proper error handling for system configuration updates\n7. Ensure all responses follow JSON-API specification",
+            "status": "done",
+            "testStrategy": "1. Test readings endpoint with mock data\n2. Verify pagination, filtering, and sorting functionality\n3. Test system configuration retrieval and updates\n4. Verify system status reporting accuracy\n5. Test error handling with invalid configuration changes"
+          },
+          {
+            "id": 5,
+            "title": "Implement request validation, error handling, and API documentation",
+            "description": "Add comprehensive request validation, error handling, and API documentation using Flask extensions like Flask-Marshmallow and Swagger/OpenAPI.",
+            "dependencies": [
+              "7.2",
+              "7.3",
+              "7.4"
+            ],
+            "details": "1. Implement request validation using Flask-Marshmallow or similar\n2. Create validation schemas for all request payloads\n3. Implement comprehensive error handling with appropriate HTTP status codes\n4. Create error response formatter following JSON-API specification\n5. Add API documentation using Swagger/OpenAPI\n6. Implement rate limiting and request throttling\n7. Add authentication middleware if required\n8. Create API versioning support",
+            "status": "done",
+            "testStrategy": "1. Test validation with valid and invalid request payloads\n2. Verify error responses follow JSON-API specification\n3. Test rate limiting functionality\n4. Verify API documentation accuracy\n5. Test authentication if implemented\n6. Verify proper handling of malformed requests"
+          }
+        ]
       },
       {
         "id": 8,
@@ -324,7 +380,64 @@
           5
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create MQTT Module Structure and Client Class",
+            "description": "Set up the MQTT module directory structure and implement the basic MQTTInterface class with initialization and connection methods using UpDryTwist.",
+            "dependencies": [],
+            "details": "1. Create the directory structure `battery_hawk/mqtt/` with `__init__.py` and `client.py`\n2. Implement the MQTTInterface class with constructor and connect method\n3. Add configuration validation for MQTT settings\n4. Implement proper error handling for connection failures\n5. Add logging for connection events\n6. Create a disconnect method to properly close MQTT connections",
+            "status": "in-progress",
+            "testStrategy": "Test connection to mock MQTT broker, verify configuration validation works correctly, test error handling with invalid broker settings"
+          },
+          {
+            "id": 2,
+            "title": "Implement Core Publishing Methods",
+            "description": "Create the core publishing methods for device readings, status changes, and other essential data types.",
+            "dependencies": [
+              "8.1"
+            ],
+            "details": "1. Implement publish_device_reading method to send device data\n2. Implement publish_device_status method for device status changes\n3. Implement publish_vehicle_summary method for aggregated vehicle data\n4. Implement publish_system_status method for system-wide status\n5. Add proper JSON serialization with error handling\n6. Implement QoS and retention flag handling based on message type",
+            "status": "pending",
+            "testStrategy": "Test each publishing method with sample data, verify JSON payload structure, test with various data types, verify QoS levels are correctly applied"
+          },
+          {
+            "id": 3,
+            "title": "Implement Event Handler Registration",
+            "description": "Create the event handler registration system to connect core engine events to MQTT publishing methods.",
+            "dependencies": [
+              "8.1",
+              "8.2"
+            ],
+            "details": "1. Create methods to register event handlers with the core engine\n2. Implement the on_device_reading handler to trigger publish_device_reading\n3. Implement the on_device_status_change handler to trigger publish_device_status\n4. Implement the on_vehicle_update handler to trigger publish_vehicle_summary\n5. Implement the on_system_status_change handler to trigger publish_system_status\n6. Implement the on_device_discovered handler to trigger publish_device_discovered",
+            "status": "pending",
+            "testStrategy": "Test event handler registration with mock core engine, verify events trigger the correct publishing methods, test with simulated event data"
+          },
+          {
+            "id": 4,
+            "title": "Implement Reconnection Logic",
+            "description": "Create robust reconnection logic to handle MQTT broker disconnections and ensure reliable message delivery.",
+            "dependencies": [
+              "8.1"
+            ],
+            "details": "1. Implement a reconnection mechanism with exponential backoff\n2. Create a background task to monitor connection status\n3. Add connection state tracking and recovery\n4. Implement message queuing for failed deliveries\n5. Add configurable reconnection parameters (max retries, retry interval)\n6. Implement proper cleanup on shutdown",
+            "status": "pending",
+            "testStrategy": "Test reconnection with simulated broker failures, verify exponential backoff works correctly, test message queuing during disconnection periods, verify successful message delivery after reconnection"
+          },
+          {
+            "id": 5,
+            "title": "Implement Topic Structure and Integration Tests",
+            "description": "Finalize the MQTT topic structure according to the PRD and create comprehensive integration tests.",
+            "dependencies": [
+              "8.2",
+              "8.3",
+              "8.4"
+            ],
+            "details": "1. Define all required MQTT topics as specified in the PRD\n2. Create helper methods for topic construction\n3. Implement topic wildcards for subscription patterns\n4. Create integration with the main application entry point\n5. Add configuration options for topic prefix customization\n6. Create comprehensive documentation for the MQTT interface",
+            "status": "pending",
+            "testStrategy": "Test the complete topic structure with all message types, verify integration with the core engine, test with high message volume, verify topic prefix customization works correctly"
+          }
+        ]
       },
       {
         "id": 9,
@@ -395,7 +508,7 @@
         "description": "Develop functionality to scan for local BM6 or BM2 devices from the command-line, with options to either list discovered devices or connect and retrieve device information.",
         "details": "1. Create a scanning module in `battery_hawk/core/scanning.py`:\n```python\nimport asyncio\nfrom bleak import BleakScanner\nfrom battery_hawk.core.devices import BM6Device, BM2Device\n\nclass DeviceScanner:\n    def __init__(self, config_manager):\n        self.config = config_manager\n        self.known_devices = self.config.get_known_devices()\n        \n    async def scan_for_devices(self, timeout=10.0):\n        \"\"\"Scan for BM6 and BM2 devices in range\"\"\"\n        devices = await BleakScanner.discover(timeout=timeout)\n        battery_monitors = []\n        \n        for device in devices:\n            if self._is_battery_monitor(device):\n                battery_monitors.append(self._create_device_info(device))\n                \n        return battery_monitors\n    \n    def _is_battery_monitor(self, device):\n        \"\"\"Check if device is a BM6 or BM2 based on advertisement data\"\"\"\n        # Implement detection logic based on manufacturer data or service UUIDs\n        # Return True if device is a battery monitor, False otherwise\n        \n    def _create_device_info(self, device):\n        \"\"\"Create device info dictionary from discovered device\"\"\"\n        return {\n            'address': device.address,\n            'name': device.name or 'Unknown',\n            'rssi': device.rssi,\n            'type': self._determine_device_type(device),\n            'is_known': device.address in self.known_devices\n        }\n        \n    def _determine_device_type(self, device):\n        \"\"\"Determine if device is BM6 or BM2 based on advertisement data\"\"\"\n        # Implement logic to determine device type\n        # Return 'BM6' or 'BM2'\n```\n\n2. Integrate scanning functionality with CLI module in `battery_hawk/cli/commands.py`:\n```python\nimport click\nimport asyncio\nfrom battery_hawk.core.scanning import DeviceScanner\n\n@click.command()\n@click.option('--timeout', default=10.0, help='Scan timeout in seconds')\n@click.option('--connect', is_flag=True, help='Connect to discovered devices and retrieve information')\n@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')\ndef scan(timeout, connect, format):\n    \"\"\"Scan for BM6 and BM2 devices in range\"\"\"\n    config_manager = click.get_current_context().obj['config']\n    scanner = DeviceScanner(config_manager)\n    \n    click.echo(\"Scanning for battery monitors...\")\n    devices = asyncio.run(scanner.scan_for_devices(timeout))\n    \n    if not devices:\n        click.echo(\"No battery monitors found.\")\n        return\n    \n    if connect:\n        devices = asyncio.run(_connect_and_get_info(devices))\n    \n    _display_devices(devices, format)\n\nasync def _connect_and_get_info(devices):\n    \"\"\"Connect to each device and retrieve additional information\"\"\"\n    # Implement connection logic to retrieve battery status, etc.\n    # Return devices with additional information\n    \ndef _display_devices(devices, format):\n    \"\"\"Display discovered devices in specified format\"\"\"\n    if format == 'json':\n        click.echo(json.dumps(devices, indent=2))\n    else:\n        # Create a formatted table\n        headers = ['Address', 'Name', 'Type', 'RSSI', 'Status']\n        rows = [[d['address'], d['name'], d['type'], d['rssi'], \n                'Known' if d['is_known'] else 'New'] for d in devices]\n        click.echo(tabulate(rows, headers=headers))\n```\n\n3. Update the main CLI group in `battery_hawk/cli/__init__.py` to include the scan command:\n```python\nfrom battery_hawk.cli.commands import scan\n\n@click.group()\n@click.pass_context\ndef cli(ctx):\n    \"\"\"Battery Hawk - Battery Monitoring Solution\"\"\"\n    # Initialize config and pass to commands\n    ctx.obj = {'config': ConfigManager()}\n\ncli.add_command(scan)\n```\n\n4. Implement device connection functionality in `battery_hawk/core/devices.py`:\n```python\nclass BatteryMonitor:\n    \"\"\"Base class for battery monitor devices\"\"\"\n    def __init__(self, address, name=None):\n        self.address = address\n        self.name = name\n        self.client = None\n        \n    async def connect(self):\n        \"\"\"Connect to the device\"\"\"\n        self.client = BleakClient(self.address)\n        await self.client.connect()\n        \n    async def disconnect(self):\n        \"\"\"Disconnect from the device\"\"\"\n        if self.client and self.client.is_connected:\n            await self.client.disconnect()\n            \n    async def get_info(self):\n        \"\"\"Get device information\"\"\"\n        # To be implemented by subclasses\n        pass\n\nclass BM6Device(BatteryMonitor):\n    \"\"\"BM6 battery monitor device\"\"\"\n    async def get_info(self):\n        \"\"\"Get BM6 device information\"\"\"\n        # Implement BM6-specific information retrieval\n        \nclass BM2Device(BatteryMonitor):\n    \"\"\"BM2 battery monitor device\"\"\"\n    async def get_info(self):\n        \"\"\"Get BM2 device information\"\"\"\n        # Implement BM2-specific information retrieval\n```",
         "testStrategy": "1. Test device scanning with mock BLE devices:\n   - Create mock BM6 and BM2 devices with appropriate advertisement data\n   - Verify scanner correctly identifies battery monitor devices\n   - Test with various timeout values\n\n2. Test device type detection:\n   - Verify correct identification of BM6 vs BM2 devices\n   - Test with edge cases and unknown devices\n\n3. Test CLI command functionality:\n   - Verify scan command works with default parameters\n   - Test with different timeout values\n   - Test with and without --connect flag\n   - Verify both table and JSON output formats\n\n4. Test device connection and information retrieval:\n   - Verify connection to mock devices\n   - Test error handling for connection failures\n   - Verify correct information retrieval from connected devices\n   - Test disconnection handling\n\n5. Integration testing:\n   - Test scanning with real BM6/BM2 devices if available\n   - Verify RSSI values are correctly reported\n   - Test in environments with multiple devices\n   - Verify performance with many devices in range\n\n6. Test error handling:\n   - Test behavior when no devices are found\n   - Test with Bluetooth disabled\n   - Test with permission issues\n   - Verify appropriate error messages are displayed",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           5,
           10
@@ -406,7 +519,7 @@
     ],
     "metadata": {
       "created": "2025-07-13T05:13:27.556Z",
-      "updated": "2025-09-01T23:50:40.785Z",
+      "updated": "2025-09-02T05:46:46.510Z",
       "description": "Tasks for master context"
     }
   }

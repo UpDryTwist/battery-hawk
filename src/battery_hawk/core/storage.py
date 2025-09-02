@@ -45,7 +45,7 @@ def require_uuid_like(value: str, name: str) -> str:
 
 
 def require_int_in_range(
-    value: Any,  # noqa: ANN401
+    value: Any,
     name: str,
     *,
     min_: int = 1,
@@ -1284,7 +1284,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 FROM "battery_reading"
                 WHERE "vehicle_id" = {influxql_quote(vehicle_id)}
                 AND time > now() - {hours}h
-            """  # noqa: S608  # nosec B608
+            """  # nosec B608  # noqa: S608
 
             self.logger.debug(
                 "Getting summary for vehicle %s (period: %d hours)",

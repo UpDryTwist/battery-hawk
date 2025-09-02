@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 @dataclass
 class StorageConfig:
     """Configuration data model for storage backends."""
-    
+
     enabled: bool
     backend_type: str
     connection_params: dict[str, Any]
@@ -69,7 +69,7 @@ class StorageConfig:
 @dataclass
 class StorageHealth:
     """Health status data model for storage backends."""
-    
+
     connected: bool
     backend_name: str
     backend_version: str
@@ -81,7 +81,7 @@ class StorageHealth:
 @dataclass
 class StorageMetrics:
     """Metrics data model for storage backend performance."""
-    
+
     total_writes: int = 0
     successful_writes: int = 0
     failed_writes: int = 0
@@ -96,21 +96,23 @@ class StorageMetrics:
 class BaseStorageBackend(abc.ABC):
     """
     Abstract base class for storage backend implementations.
-    
+
     Provides a standard interface for database operations including connection
     management, data storage, querying, and health monitoring. All storage
     backends should inherit from this class and implement the abstract methods.
     """
 
-    def __init__(self, config_manager: "ConfigManager") -> None:
+    def __init__(self, config_manager: ConfigManager) -> None:
         """
         Initialize BaseStorageBackend with configuration manager.
-        
+
         Args:
             config_manager: Configuration manager instance
         """
         self.config = config_manager
-        self.logger = logging.getLogger(f"battery_hawk.storage.{self.backend_name.lower()}")
+        self.logger = logging.getLogger(
+            f"battery_hawk.storage.{self.backend_name.lower()}",
+        )
         self.connected = False
         self.metrics = StorageMetrics()
         self._initialize_backend()
@@ -136,7 +138,7 @@ class BaseStorageBackend(abc.ABC):
     def capabilities(self) -> set[str]:
         """
         Return a set of supported capability strings for this backend.
-        
+
         Common capabilities:
         - "time_series": Supports time series data storage
         - "aggregation": Supports data aggregation queries
@@ -151,7 +153,7 @@ class BaseStorageBackend(abc.ABC):
     async def connect(self) -> bool:
         """
         Connect to the storage backend.
-        
+
         Returns:
             True if connection was successful, False otherwise
         """
@@ -159,9 +161,7 @@ class BaseStorageBackend(abc.ABC):
 
     @abc.abstractmethod
     async def disconnect(self) -> None:
-        """
-        Disconnect from the storage backend and clean up resources.
-        """
+        """Disconnect from the storage backend and clean up resources."""
         ...
 
     @abc.abstractmethod
@@ -174,13 +174,13 @@ class BaseStorageBackend(abc.ABC):
     ) -> bool:
         """
         Store a battery reading in the storage backend.
-        
+
         Args:
             device_id: MAC address of the device
             vehicle_id: ID of the vehicle
             device_type: Type of device (BM6, BM2, etc.)
             reading: Battery reading data
-            
+
         Returns:
             True if storage was successful, False otherwise
         """
@@ -194,11 +194,11 @@ class BaseStorageBackend(abc.ABC):
     ) -> list[dict[str, Any]]:
         """
         Get recent readings for a device.
-        
+
         Args:
             device_id: MAC address of the device
             limit: Maximum number of readings to return
-            
+
         Returns:
             List of recent readings, ordered by timestamp (newest first)
         """
@@ -212,11 +212,11 @@ class BaseStorageBackend(abc.ABC):
     ) -> dict[str, Any]:
         """
         Get summary statistics for a vehicle over a time period.
-        
+
         Args:
             vehicle_id: Vehicle ID
             hours: Number of hours to look back
-            
+
         Returns:
             Summary statistics dictionary with keys:
             - vehicle_id: str
@@ -232,7 +232,7 @@ class BaseStorageBackend(abc.ABC):
     async def health_check(self) -> bool:
         """
         Perform a health check on the storage backend.
-        
+
         Returns:
             True if storage is healthy, False otherwise
         """
@@ -241,7 +241,7 @@ class BaseStorageBackend(abc.ABC):
     def is_connected(self) -> bool:
         """
         Check if storage backend is connected.
-        
+
         Returns:
             True if connected, False otherwise
         """
@@ -250,10 +250,10 @@ class BaseStorageBackend(abc.ABC):
     def has_capability(self, capability: str) -> bool:
         """
         Check if the backend supports a given capability.
-        
+
         Args:
             capability: Capability string to check
-            
+
         Returns:
             True if capability is supported, False otherwise
         """
@@ -262,7 +262,7 @@ class BaseStorageBackend(abc.ABC):
     def get_metrics(self) -> StorageMetrics:
         """
         Get performance metrics for the storage backend.
-        
+
         Returns:
             StorageMetrics instance with current metrics
         """
@@ -271,7 +271,7 @@ class BaseStorageBackend(abc.ABC):
     def get_health_status(self) -> StorageHealth:
         """
         Get current health status of the storage backend.
-        
+
         Returns:
             StorageHealth instance with current status
         """
@@ -285,7 +285,7 @@ class BaseStorageBackend(abc.ABC):
     async def get_storage_info(self) -> dict[str, Any]:
         """
         Get information about the storage backend.
-        
+
         Returns:
             Dictionary with backend information including name, version,
             capabilities, connection status, and metrics

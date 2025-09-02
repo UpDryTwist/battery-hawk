@@ -11,8 +11,34 @@ keywords = ["battery_hawk"]
 homepage = "https://github.com/UpDryTwist/battery-hawk"
 packages = [ { include = "battery_hawk", from = "src" } ]
 
-[lint.per-file-ignores]
-"tests/*.py" = ["S101", "S603"]
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["examples/"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # Trailing comma missing
+    "ISC001",  # Implicitly concatenated string literals on one line
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/*.py" = [
+    "A", "ANN", "ARG", "B", "BLE", "C", "COM", "D", "DJ", "DTZ", "E", "EM", "ERA", "EXE", "F", "FA", "FBT", "FIX", "FLY", "G", "I", "ICN", "INP", "INT", "ISC", "N", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "Q", "RET", "RSE", "RUF", "S", "SIM", "SLF", "SLOT", "T", "TCH", "TD", "TID", "TRY", "UP", "W", "YTT"
+]
+"tests/*.py" = [
+    "S101",    # Use of assert detected
+    "S603",    # subprocess call: check for execution of untrusted input
+    "S108",    # Probable insecure usage of temporary file or directory
+    "ANN",     # All annotation rules - tests don't need strict typing
+    "D",       # All docstring rules - tests don't need comprehensive docs
+    "PLR2004", # Magic value used in comparison
+    "PLR0915", # Too many statements
+    "BLE001",  # Do not catch blind exception
+    "SLF001",  # Private member accessed (common in tests)
+    "PLC0415", # import should be at the top-level of a file
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "docs", "examples", ".venv", "dist", ".ruff_cache", ".github"]
@@ -52,6 +78,9 @@ updrytwist-updrytwist = "^0.0.42"
 asyncio-mqtt = "^0.16.2"
 watchdog = "^6.0.0"
 jsonschema = "^4.24.0"
+flask-marshmallow = "^1.3.0"
+flasgger = "^0.9.7.1"
+flask-limiter = "^3.12"
 
 [tool.poetry.group.dev.dependencies]
 poetry = "^1.7.1"

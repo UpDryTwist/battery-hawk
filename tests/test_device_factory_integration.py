@@ -423,7 +423,7 @@ class TestDeviceFactoryPerformance:
         device_type: str,
         mac_address: str,
         config: PerformanceTestConfig,
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         """Create a device and read data from it."""
         device = device_factory.create_device(device_type, mac_address, config)
         await device.connect()

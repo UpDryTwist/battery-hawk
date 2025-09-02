@@ -5,13 +5,13 @@ This module tests the DataStorage class with InfluxDB backend functionality
 including connection handling, data writing, and querying.
 """
 
-import asyncio
+import time
+from typing import Any
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
 
 from battery_hawk.core.storage import DataStorage
-from battery_hawk.config.config_manager import ConfigManager
 
 
 class MockConfigManager:
@@ -39,8 +39,8 @@ class MockConfigManager:
                         "buffer_max_size": 10000,
                         "buffer_flush_interval_seconds": 30.0,
                         "connection_timeout_seconds": 30.0,
-                        "health_check_interval_seconds": 60.0
-                    }
+                        "health_check_interval_seconds": 60.0,
+                    },
                 },
             },
             "devices": {
@@ -49,7 +49,7 @@ class MockConfigManager:
                     "AA:BB:CC:DD:EE:FF": {
                         "name": "Test Device",
                         "type": "BM6",
-                    }
+                    },
                 },
             },
             "vehicles": {
@@ -57,7 +57,7 @@ class MockConfigManager:
                 "vehicles": {
                     "vehicle_1": {
                         "name": "Test Vehicle",
-                    }
+                    },
                 },
             },
         }
@@ -68,13 +68,13 @@ class MockConfigManager:
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Fixture for mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_config_manager_disabled():
+def mock_config_manager_disabled() -> MockConfigManager:
     """Fixture for mock configuration manager with InfluxDB disabled."""
     return MockConfigManager(influxdb_enabled=False)
 
@@ -83,14 +83,21 @@ def mock_config_manager_disabled():
 class TestDataStorageInfluxDB:
     """Test cases for DataStorage with InfluxDB backend."""
 
-    async def test_initialization_disabled(self, mock_config_manager_disabled):
+    async def test_initialization_disabled(
+        self,
+        mock_config_manager_disabled: Any,
+    ) -> None:
         """Test DataStorage initialization with InfluxDB disabled."""
         storage = DataStorage(mock_config_manager_disabled)
         assert storage.client is None
         assert not storage.connected
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_connect_success(self, mock_influx_client, mock_config_manager):
+    async def test_connect_success(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test successful connection to InfluxDB."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -110,7 +117,11 @@ class TestDataStorageInfluxDB:
         mock_client_instance.ping.assert_called_once()
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_connect_failure(self, mock_influx_client, mock_config_manager):
+    async def test_connect_failure(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test connection failure to InfluxDB."""
         # Setup mocks to raise exception
         mock_influx_client.side_effect = Exception("Connection failed")
@@ -122,7 +133,7 @@ class TestDataStorageInfluxDB:
         assert storage.connected is False
         assert storage.client is None
 
-    async def test_connect_disabled(self, mock_config_manager_disabled):
+    async def test_connect_disabled(self, mock_config_manager_disabled: Any) -> None:
         """Test connection when InfluxDB is disabled."""
         storage = DataStorage(mock_config_manager_disabled)
         result = await storage.connect()
@@ -132,7 +143,11 @@ class TestDataStorageInfluxDB:
         assert storage.client is None
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_store_reading_success(self, mock_influx_client, mock_config_manager):
+    async def test_store_reading_success(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test successful storage of battery reading."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -156,12 +171,20 @@ class TestDataStorageInfluxDB:
             "temperature": 25.0,
         }
 
-        result = await storage.store_reading(device_id, vehicle_id, device_type, reading)
+        result = await storage.store_reading(
+            device_id,
+            vehicle_id,
+            device_type,
+            reading,
+        )
 
         assert result is True
         mock_write_api.write.assert_called_once()
 
-    async def test_store_reading_not_connected(self, mock_config_manager):
+    async def test_store_reading_not_connected(
+        self,
+        mock_config_manager: Any,
+    ) -> None:
         """Test storage when not connected (should buffer)."""
         storage = DataStorage(mock_config_manager)
         # Don't connect
@@ -173,7 +196,11 @@ class TestDataStorageInfluxDB:
         assert len(storage._reading_buffer) == 1
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_get_recent_readings_success(self, mock_influx_client, mock_config_manager):
+    async def test_get_recent_readings_success(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test successful retrieval of recent readings."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -205,7 +232,10 @@ class TestDataStorageInfluxDB:
         data_query_made = any("SELECT * FROM" in call for call in query_calls)
         assert data_query_made
 
-    async def test_get_recent_readings_not_connected(self, mock_config_manager):
+    async def test_get_recent_readings_not_connected(
+        self,
+        mock_config_manager: Any,
+    ) -> None:
         """Test reading retrieval when not connected."""
         storage = DataStorage(mock_config_manager)
         # Don't connect
@@ -215,7 +245,11 @@ class TestDataStorageInfluxDB:
         assert result == []
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_health_check_success(self, mock_influx_client, mock_config_manager):
+    async def test_health_check_success(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test successful health check."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -233,7 +267,11 @@ class TestDataStorageInfluxDB:
         assert result is True
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_health_check_failure(self, mock_influx_client, mock_config_manager):
+    async def test_health_check_failure(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test health check failure."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -252,7 +290,11 @@ class TestDataStorageInfluxDB:
         assert storage.connected is False
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_disconnect(self, mock_influx_client, mock_config_manager):
+    async def test_disconnect(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test disconnection from InfluxDB."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -280,7 +322,11 @@ class TestInfluxDBRetentionPolicies:
     """Test cases for InfluxDB retention policy management."""
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_setup_retention_policies(self, mock_influx_client, mock_config_manager):
+    async def test_setup_retention_policies(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test setting up retention policies during connection."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -297,15 +343,15 @@ class TestInfluxDBRetentionPolicies:
                 "duration": "30d",
                 "replication": 1,
                 "shard_duration": "1d",
-                "default": True
+                "default": True,
             },
             "long_term": {
                 "name": "long_term",
                 "duration": "365d",
                 "replication": 1,
                 "shard_duration": "7d",
-                "default": False
-            }
+                "default": False,
+            },
         }
 
         storage = DataStorage(mock_config_manager)
@@ -316,7 +362,11 @@ class TestInfluxDBRetentionPolicies:
         assert mock_query_api.query.call_count >= 2  # At least 2 policies created
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_get_retention_policies(self, mock_influx_client, mock_config_manager):
+    async def test_get_retention_policies(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test retrieving retention policies."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -324,7 +374,12 @@ class TestInfluxDBRetentionPolicies:
         mock_result = MagicMock()
         mock_result.get_points.return_value = [
             {"name": "autogen", "duration": "0s", "replicaN": 1, "default": True},
-            {"name": "long_term", "duration": "8760h0m0s", "replicaN": 1, "default": False},
+            {
+                "name": "long_term",
+                "duration": "8760h0m0s",
+                "replicaN": 1,
+                "default": False,
+            },
         ]
         mock_query_api.query.return_value = mock_result
         mock_client_instance.ping = MagicMock()
@@ -343,7 +398,11 @@ class TestInfluxDBRetentionPolicies:
         mock_query_api.query.assert_called()
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_drop_retention_policy(self, mock_influx_client, mock_config_manager):
+    async def test_drop_retention_policy(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test dropping a retention policy."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -368,7 +427,10 @@ class TestInfluxDBRetentionPolicies:
                 break
         assert drop_call is not None
 
-    def test_get_retention_policy_for_measurement(self, mock_config_manager):
+    def test_get_retention_policy_for_measurement(
+        self,
+        mock_config_manager: Any,
+    ) -> None:
         """Test retention policy selection for measurements."""
         # Add retention policies to config
         mock_config_manager.configs["system"]["influxdb"]["retention_policies"] = {
@@ -376,14 +438,14 @@ class TestInfluxDBRetentionPolicies:
                 "name": "autogen",
                 "duration": "30d",
                 "replication": 1,
-                "default": True
+                "default": True,
             },
             "short_term": {
                 "name": "short_term",
                 "duration": "7d",
                 "replication": 1,
-                "default": False
-            }
+                "default": False,
+            },
         }
 
         storage = DataStorage(mock_config_manager)
@@ -399,7 +461,11 @@ class TestInfluxDBRetentionPolicies:
         assert policy == "short_term"
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_store_reading_with_retention_policy(self, mock_influx_client, mock_config_manager):
+    async def test_store_reading_with_retention_policy(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test storing readings with retention policy selection."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -415,8 +481,8 @@ class TestInfluxDBRetentionPolicies:
                 "name": "autogen",
                 "duration": "30d",
                 "replication": 1,
-                "default": True
-            }
+                "default": True,
+            },
         }
 
         storage = DataStorage(mock_config_manager)
@@ -424,7 +490,12 @@ class TestInfluxDBRetentionPolicies:
 
         # Test storing reading
         reading = {"voltage": 12.5, "current": 2.3, "temperature": 25.0}
-        result = await storage.store_reading("AA:BB:CC:DD:EE:FF", "vehicle_1", "BM6", reading)
+        result = await storage.store_reading(
+            "AA:BB:CC:DD:EE:FF",
+            "vehicle_1",
+            "BM6",
+            reading,
+        )
 
         assert result is True
         mock_write_api.write.assert_called_once()
@@ -439,7 +510,11 @@ class TestInfluxDBErrorHandling:
     """Test cases for InfluxDB error handling and recovery."""
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_connection_retry_on_failure(self, mock_influx_client, mock_config_manager):
+    async def test_connection_retry_on_failure(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test connection retry logic on failure."""
         # Setup mocks to always fail
         mock_client_instance = MagicMock()
@@ -457,7 +532,7 @@ class TestInfluxDBErrorHandling:
             "buffer_max_size": 100,
             "buffer_flush_interval_seconds": 1.0,
             "connection_timeout_seconds": 1.0,  # Short timeout for testing
-            "health_check_interval_seconds": 10.0
+            "health_check_interval_seconds": 10.0,
         }
 
         storage = DataStorage(mock_config_manager)
@@ -475,7 +550,11 @@ class TestInfluxDBErrorHandling:
         assert delay2 >= delay1  # Should increase with backoff
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_reading_buffering_when_disconnected(self, mock_influx_client, mock_config_manager):
+    async def test_reading_buffering_when_disconnected(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test that readings are buffered when connection is lost."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -488,8 +567,12 @@ class TestInfluxDBErrorHandling:
         storage = DataStorage(mock_config_manager)
 
         # Test storing reading when not connected (should buffer)
-        result = await storage.store_reading("AA:BB:CC:DD:EE:FF", "vehicle_1", "BM6",
-                                           {"voltage": 12.5, "current": 2.3})
+        result = await storage.store_reading(
+            "AA:BB:CC:DD:EE:FF",
+            "vehicle_1",
+            "BM6",
+            {"voltage": 12.5, "current": 2.3},
+        )
 
         assert result is True  # Should succeed (buffered)
         assert len(storage._reading_buffer) == 1
@@ -500,7 +583,11 @@ class TestInfluxDBErrorHandling:
         assert buffered.reading["voltage"] == 12.5
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_buffer_flush_on_reconnection(self, mock_influx_client, mock_config_manager):
+    async def test_buffer_flush_on_reconnection(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test that buffered readings are flushed when connection is restored."""
         # Setup mocks
         mock_client_instance = MagicMock()
@@ -528,15 +615,18 @@ class TestInfluxDBErrorHandling:
         assert mock_write_api.write.call_count >= 2
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_write_timeout_handling(self, mock_influx_client, mock_config_manager):
+    async def test_write_timeout_handling(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test handling of write operation timeouts."""
         # Setup mocks
         mock_client_instance = MagicMock()
         mock_write_api = MagicMock()
 
         # Make write operation hang (simulate timeout)
-        def slow_write(*args, **kwargs):
-            import time
+        def slow_write(*args: Any, **kwargs: Any) -> None:
             time.sleep(10)  # Longer than timeout
 
         mock_write_api.write.side_effect = slow_write
@@ -546,20 +636,29 @@ class TestInfluxDBErrorHandling:
         mock_influx_client.return_value = mock_client_instance
 
         # Configure short timeout for testing
-        mock_config_manager.configs["system"]["influxdb"]["error_recovery"]["connection_timeout_seconds"] = 0.1
+        mock_config_manager.configs["system"]["influxdb"]["error_recovery"][
+            "connection_timeout_seconds"
+        ] = 0.1
 
         storage = DataStorage(mock_config_manager)
         await storage.connect()
 
         # This should timeout and buffer the reading
-        result = await storage.store_reading("AA:BB:CC:DD:EE:FF", "vehicle_1", "BM6",
-                                           {"voltage": 12.5})
+        result = await storage.store_reading(
+            "AA:BB:CC:DD:EE:FF",
+            "vehicle_1",
+            "BM6",
+            {"voltage": 12.5},
+        )
 
         # Should fail direct write but succeed in buffering
         assert result is True
         assert len(storage._reading_buffer) == 1
 
-    async def test_connection_error_detection(self, mock_config_manager):
+    async def test_connection_error_detection(
+        self,
+        mock_config_manager: Any,
+    ) -> None:
         """Test connection error detection logic."""
         storage = DataStorage(mock_config_manager)
 
@@ -585,7 +684,7 @@ class TestInfluxDBErrorHandling:
         for error in non_connection_errors:
             assert storage._is_connection_error(error) is False
 
-    async def test_retry_delay_calculation(self, mock_config_manager):
+    async def test_retry_delay_calculation(self, mock_config_manager: Any) -> None:
         """Test exponential backoff retry delay calculation."""
         storage = DataStorage(mock_config_manager)
 
@@ -603,16 +702,27 @@ class TestInfluxDBErrorHandling:
         assert large_delay <= storage._error_recovery_config.max_retry_delay_seconds
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
-    async def test_buffer_size_limit(self, mock_influx_client, mock_config_manager):
+    async def test_buffer_size_limit(
+        self,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
         """Test that buffer respects size limits."""
         # Configure small buffer for testing
-        mock_config_manager.configs["system"]["influxdb"]["error_recovery"]["buffer_max_size"] = 3
+        mock_config_manager.configs["system"]["influxdb"]["error_recovery"][
+            "buffer_max_size"
+        ] = 3
 
         storage = DataStorage(mock_config_manager)
 
         # Add readings beyond buffer limit
         for i in range(5):
-            await storage.store_reading(f"device{i}", "vehicle1", "BM6", {"voltage": 12.0 + i})
+            await storage.store_reading(
+                f"device{i}",
+                "vehicle1",
+                "BM6",
+                {"voltage": 12.0 + i},
+            )
 
         # Buffer should only contain last 3 readings
         assert len(storage._reading_buffer) == 3

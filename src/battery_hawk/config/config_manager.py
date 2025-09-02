@@ -60,6 +60,12 @@ DEFAULTS: dict[str, dict] = {
             },
         },
         "mqtt": {"enabled": False, "topic_prefix": "batteryhawk"},
+        "api": {
+            "enabled": True,
+            "host": "0.0.0.0",  # nosec B104 - Configurable bind address  # noqa: S104
+            "port": 5000,
+            "debug": False,
+        },
     },
     "devices": {"version": "1.0", "devices": {}},
     "vehicles": {"version": "1.0", "vehicles": {}},
@@ -75,6 +81,7 @@ SCHEMAS: dict[str, dict] = {
             "discovery": {"type": "object"},
             "influxdb": {"type": "object"},
             "mqtt": {"type": "object"},
+            "api": {"type": "object"},
         },
         "required": [
             "version",
@@ -83,6 +90,7 @@ SCHEMAS: dict[str, dict] = {
             "discovery",
             "influxdb",
             "mqtt",
+            "api",
         ],
     },
     "devices": {

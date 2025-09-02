@@ -121,7 +121,7 @@ class TestPerformanceThresholds:
         start_time = time.time()
 
         # Perform concurrent operations
-        async def device_operation(device: Any) -> list[float]:  # noqa: ANN401
+        async def device_operation(device: Any) -> list[float]:
             """Perform multiple operations on a single device."""
             device_durations = []
             for _ in range(3):
@@ -262,7 +262,7 @@ class TestScalabilityBenchmarks:
         start_time = time.time()
 
         # Perform concurrent read operations on all devices
-        async def read_device_data(device: Any) -> Any:  # noqa: ANN401
+        async def read_device_data(device: Any) -> Any:
             """Read data from a single device."""
             return await device.read_data()
 
@@ -359,7 +359,7 @@ class TestFailureHandlingPerformance:
         # Override the read_data method to simulate failures
         original_read_data = device.read_data
 
-        async def failing_read_data() -> Any:  # noqa: ANN401
+        async def failing_read_data() -> Any:
             # 80% failure rate
             if random.random() < 0.8:
                 raise ConnectionError("Simulated connection failure")
@@ -412,7 +412,7 @@ class TestFailureHandlingPerformance:
         # Override the read_data method to simulate timeouts
         original_read_data = device.read_data
 
-        async def slow_read_data() -> Any:  # noqa: ANN401
+        async def slow_read_data() -> Any:
             # 30% chance of timeout
             if random.random() < 0.3:
                 await asyncio.sleep(2.0)  # Simulate slow operation
@@ -569,7 +569,7 @@ class TestConcurrencyBenchmarks:
         start_time = time.time()
 
         # Create devices concurrently
-        async def create_device(device_id: int) -> Any:  # noqa: ANN401
+        async def create_device(device_id: int) -> Any:
             """Create a single device."""
             mac_address = f"AA:BB:CC:DD:EE:{device_id:02X}"
             device_type = "BM6" if device_id % 2 == 0 else "BM2"
@@ -607,7 +607,7 @@ class TestConcurrencyBenchmarks:
         start_time = time.time()
 
         # Read data from all devices concurrently
-        async def read_device_data(device: Any) -> None:  # noqa: ANN401
+        async def read_device_data(device: Any) -> None:
             """Read data from a single device."""
             for _ in range(3):  # Read 3 times per device
                 reading = await device.read_data()
@@ -632,7 +632,7 @@ class TestConcurrencyBenchmarks:
         start_time = time.time()
 
         # Create devices and read data concurrently
-        async def create_and_read(device_id: int) -> Any:  # noqa: ANN401
+        async def create_and_read(device_id: int) -> Any:
             """Create a device and read data from it."""
             mac_address = f"AA:BB:CC:DD:EE:{device_id:02X}"
             device_type = "BM6" if device_id % 2 == 0 else "BM2"

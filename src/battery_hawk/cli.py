@@ -639,7 +639,7 @@ async def _auto_detect_device_type(
 
 
 async def _connect_with_retry(
-    device: Any,  # noqa: ANN401
+    device: Any,
     timeout: int,
     retry_attempts: int,
     retry_delay: float,

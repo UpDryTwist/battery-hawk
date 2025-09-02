@@ -160,6 +160,25 @@ class DeviceRegistry:
             if device.get("vehicle_id") == vehicle_id
         ]
 
+    async def remove_device(self, mac_address: str) -> bool:
+        """
+        Remove a device from the registry.
+
+        Args:
+            mac_address: MAC address of the device to remove
+
+        Returns:
+            True if device was removed successfully
+        """
+        if mac_address not in self.devices:
+            self.logger.warning("Attempted to remove unknown device: %s", mac_address)
+            return False
+
+        del self.devices[mac_address]
+        self.logger.info("Removed device: %s", mac_address)
+        await self._save_devices()
+        return True
+
     async def _save_devices(self) -> None:
         """Save devices to configuration."""
         try:
