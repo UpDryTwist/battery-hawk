@@ -244,8 +244,61 @@
           2,
           5
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement InfluxDB Client with AsyncIO Support",
+            "description": "Create the InfluxDB client class with AsyncIO support for non-blocking database operations. Implement connection handling, database creation, and basic error management.",
+            "dependencies": [],
+            "details": "Create the storage.py module with an InfluxDBStorage class that initializes the connection to InfluxDB using the AsyncIO-compatible client. Implement the connect() method to establish connection using configuration parameters from the config manager. Handle connection errors and implement reconnection logic. Ensure the client properly creates the database if it doesn't exist.",
+            "status": "done",
+            "testStrategy": "Test connection with mock InfluxDB server. Verify database creation logic. Test error handling with simulated connection failures. Verify reconnection attempts work correctly."
+          },
+          {
+            "id": 2,
+            "title": "Implement Data Point Storage Functionality",
+            "description": "Create the store_reading method to format and store time series data points with proper tags and fields structure according to the schema.",
+            "dependencies": [
+              "6.1"
+            ],
+            "details": "Implement the store_reading method that accepts device_id, vehicle_id, device_type, and reading parameters. Format the data point with appropriate measurement name, timestamp, tags (device_id, device_name, vehicle_name, device_type), and fields from the reading data. Implement error handling for write failures and return appropriate success/failure status.",
+            "status": "done",
+            "testStrategy": "Test data point creation with sample readings. Verify proper tag and field structure. Test error handling during write operations. Verify timestamp formatting is correct."
+          },
+          {
+            "id": 3,
+            "title": "Implement Retention Policy Management",
+            "description": "Create functionality to manage InfluxDB retention policies for time series data to control database growth and optimize performance.",
+            "dependencies": [
+              "6.1"
+            ],
+            "details": "Add methods to create and manage retention policies based on configuration settings. Implement create_retention_policy() and update_retention_policy() methods that configure how long data is kept in the database. Allow configuration of retention duration, replication factor, and default policy status. Apply retention policies to measurements during database initialization.",
+            "status": "done",
+            "testStrategy": "Test creation of retention policies with various durations. Verify policy application to measurements. Test updating existing policies. Verify data is properly retained or dropped according to policy settings."
+          },
+          {
+            "id": 4,
+            "title": "Create Database Abstraction Layer",
+            "description": "Implement an abstract base class for storage backends to allow for future alternative database implementations beyond InfluxDB.",
+            "dependencies": [],
+            "details": "Create an abstract StorageBackend class that defines the interface for all storage implementations. Refactor InfluxDBStorage to inherit from this base class. Implement required abstract methods including connect(), disconnect(), store_reading(), and query_readings(). This abstraction will allow for easy implementation of alternative storage backends in the future.",
+            "status": "done",
+            "testStrategy": "Test the abstraction layer with a mock alternative backend implementation. Verify all required methods are properly defined. Test polymorphic usage of different storage backends through the common interface."
+          },
+          {
+            "id": 5,
+            "title": "Implement Advanced Error Handling and Recovery",
+            "description": "Create comprehensive error handling for database operations including connection loss recovery, write failure management, and data buffering during outages.",
+            "dependencies": [
+              "6.1",
+              "6.2"
+            ],
+            "details": "Implement a robust error handling system that detects various failure scenarios (connection loss, write failures, query timeouts). Create a reconnection mechanism with exponential backoff. Implement a temporary buffer for storing readings during database outages, with automatic replay once connection is restored. Add health check method to periodically verify database connectivity. Implement detailed error logging with appropriate severity levels.",
+            "status": "in-progress",
+            "testStrategy": "Test recovery from simulated connection losses. Verify data buffering works during outages. Test automatic replay of buffered data. Verify exponential backoff logic during reconnection attempts. Test health check functionality."
+          }
+        ]
       },
       {
         "id": 7,
@@ -353,7 +406,7 @@
     ],
     "metadata": {
       "created": "2025-07-13T05:13:27.556Z",
-      "updated": "2025-07-19T22:35:45.310Z",
+      "updated": "2025-09-01T23:50:40.785Z",
       "description": "Tasks for master context"
     }
   }

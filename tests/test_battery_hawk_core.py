@@ -722,11 +722,17 @@ class TestDataStorage:
 
     @pytest.mark.asyncio
     async def test_store_reading_disconnected(self, data_storage: DataStorage) -> None:
-        """Test storing reading when not connected."""
+        """Test storing reading when not connected (should buffer)."""
         result = await data_storage.store_reading(
             "AA:BB:CC:DD:EE:FF",
             "test_vehicle",
             "BM6",
             {"voltage": 12.5},
         )
-        assert result is False
+        # With error handling, readings are buffered when not connected
+        assert result is True
+        # Verify the reading was buffered
+        assert len(data_storage._reading_buffer) == 1
+        buffered = data_storage._reading_buffer[0]
+        assert buffered.device_id == "AA:BB:CC:DD:EE:FF"
+        assert buffered.reading["voltage"] == 12.5
