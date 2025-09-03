@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,21 +20,23 @@ class MockDataStorage:
         """Initialize mock data storage."""
         self.connected = True
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """Mock is connected."""
         return self.connected
 
-    async def health_check(self):
+    async def health_check(self) -> bool:
         """Mock health check."""
         return self.connected
 
-    def get_health_status(self):
+    def get_health_status(self) -> Any:
         """Mock get health status."""
         return MagicMock(
-            connected=self.connected, backend_name="MockDB", backend_version="1.0"
+            connected=self.connected,
+            backend_name="MockDB",
+            backend_version="1.0",
         )
 
-    def get_metrics(self):
+    def get_metrics(self) -> Any:
         """Mock get metrics."""
         return MagicMock(total_writes=100, successful_writes=95, failed_writes=5)
 
@@ -57,10 +60,10 @@ class MockDeviceRegistry:
                 "mac_address": "AA:BB:CC:DD:EE:FF",
                 "device_type": "BM6",
                 "status": "configured",
-            }
+            },
         }
 
-    def get_configured_devices(self):
+    def get_configured_devices(self) -> list[Any]:
         """Get configured devices."""
         return [
             device
@@ -78,7 +81,7 @@ class MockVehicleRegistry:
             "vehicle_1": {
                 "name": "Test Vehicle",
                 "created_at": "2025-01-01T10:00:00Z",
-            }
+            },
         }
 
 
@@ -116,13 +119,13 @@ class MockConfigManager(ConfigManager):
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Create a mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_core_engine(mock_config_manager):
+def mock_core_engine(mock_config_manager: MockConfigManager) -> MagicMock:
     """Create a mock core engine."""
     mock_engine = MagicMock(spec=BatteryHawkCore)
     mock_engine.running = True
@@ -154,13 +157,16 @@ def mock_core_engine(mock_config_manager):
 
 
 @pytest.fixture
-def api_instance(mock_config_manager, mock_core_engine):
+def api_instance(
+    mock_config_manager: MockConfigManager,
+    mock_core_engine: MagicMock,
+) -> BatteryHawkAPI:
     """Create a BatteryHawkAPI instance for testing."""
     return BatteryHawkAPI(mock_config_manager, mock_core_engine)
 
 
 @pytest.fixture
-def client(api_instance):
+def client(api_instance: BatteryHawkAPI) -> Any:
     """Create a test client."""
     return api_instance.app.test_client()
 
@@ -168,7 +174,7 @@ def client(api_instance):
 class TestSystemEndpoints:
     """Test cases for system API endpoints."""
 
-    def test_get_system_config(self, client) -> None:
+    def test_get_system_config(self, client: Any) -> None:
         """Test GET /api/system/config endpoint."""
         response = client.get("/api/system/config")
         assert response.status_code == 200
@@ -181,7 +187,7 @@ class TestSystemEndpoints:
         assert "logging" in data["data"]["attributes"]
         assert "bluetooth" in data["data"]["attributes"]
 
-    def test_update_system_config_success(self, client) -> None:
+    def test_update_system_config_success(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with valid updates."""
         request_data = {
             "data": {
@@ -191,7 +197,7 @@ class TestSystemEndpoints:
                     "logging": {"level": "DEBUG"},
                     "bluetooth": {"max_concurrent_connections": 5},
                 },
-            }
+            },
         }
 
         response = client.patch(
@@ -207,16 +213,16 @@ class TestSystemEndpoints:
             data["data"]["attributes"]["bluetooth"]["max_concurrent_connections"] == 5
         )
 
-    def test_update_system_config_invalid_section(self, client) -> None:
+    def test_update_system_config_invalid_section(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with invalid section."""
         request_data = {
             "data": {
                 "type": "system-config",
                 "id": "current",
                 "attributes": {
-                    "version": "2.0"  # Not allowed to modify
+                    "version": "2.0",  # Not allowed to modify
                 },
-            }
+            },
         }
 
         response = client.patch(
@@ -230,14 +236,14 @@ class TestSystemEndpoints:
         assert "errors" in data
         assert "cannot be modified" in data["errors"][0]["detail"]
 
-    def test_update_system_config_invalid_logging_level(self, client) -> None:
+    def test_update_system_config_invalid_logging_level(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with invalid logging level."""
         request_data = {
             "data": {
                 "type": "system-config",
                 "id": "current",
                 "attributes": {"logging": {"level": "INVALID"}},
-            }
+            },
         }
 
         response = client.patch(
@@ -247,7 +253,10 @@ class TestSystemEndpoints:
         )
         assert response.status_code == 400
 
-    def test_update_system_config_invalid_bluetooth_connections(self, client) -> None:
+    def test_update_system_config_invalid_bluetooth_connections(
+        self,
+        client: Any,
+    ) -> None:
         """Test PATCH /api/system/config endpoint with invalid bluetooth connections."""
         request_data = {
             "data": {
@@ -255,10 +264,10 @@ class TestSystemEndpoints:
                 "id": "current",
                 "attributes": {
                     "bluetooth": {
-                        "max_concurrent_connections": 20  # Too high
-                    }
+                        "max_concurrent_connections": 20,  # Too high
+                    },
                 },
-            }
+            },
         }
 
         response = client.patch(
@@ -268,7 +277,7 @@ class TestSystemEndpoints:
         )
         assert response.status_code == 400
 
-    def test_update_system_config_invalid_api_port(self, client) -> None:
+    def test_update_system_config_invalid_api_port(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with invalid API port."""
         request_data = {
             "data": {
@@ -276,10 +285,10 @@ class TestSystemEndpoints:
                 "id": "current",
                 "attributes": {
                     "api": {
-                        "port": 100  # Too low
-                    }
+                        "port": 100,  # Too low
+                    },
                 },
-            }
+            },
         }
 
         response = client.patch(
@@ -289,7 +298,7 @@ class TestSystemEndpoints:
         )
         assert response.status_code == 400
 
-    def test_update_system_config_validation_error(self, client) -> None:
+    def test_update_system_config_validation_error(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with validation errors."""
         # Missing required data structure
         request_data = {"type": "system-config", "attributes": {}}
@@ -301,7 +310,7 @@ class TestSystemEndpoints:
         )
         assert response.status_code == 400
 
-    def test_get_system_status(self, client) -> None:
+    def test_get_system_status(self, client: Any) -> None:
         """Test GET /api/system/status endpoint."""
         response = client.get("/api/system/status")
         assert response.status_code == 200
@@ -331,7 +340,7 @@ class TestSystemEndpoints:
         assert "discovery_service" in components
         assert "state_manager" in components
 
-    def test_get_system_health_healthy(self, client) -> None:
+    def test_get_system_health_healthy(self, client: Any) -> None:
         """Test GET /api/system/health endpoint when system is healthy."""
         response = client.get("/api/system/health")
         assert response.status_code == 200
@@ -343,7 +352,11 @@ class TestSystemEndpoints:
         assert data["data"]["attributes"]["components"]["core_engine"] is True
         assert data["data"]["attributes"]["components"]["data_storage"] is True
 
-    def test_get_system_health_unhealthy(self, client, mock_core_engine) -> None:
+    def test_get_system_health_unhealthy(
+        self,
+        client: Any,
+        mock_core_engine: MagicMock,
+    ) -> None:
         """Test GET /api/system/health endpoint when system is unhealthy."""
         # Make storage unhealthy
         mock_core_engine.data_storage.connected = False
@@ -355,14 +368,14 @@ class TestSystemEndpoints:
         assert data["data"]["attributes"]["healthy"] is False
         assert data["data"]["attributes"]["components"]["data_storage"] is False
 
-    def test_system_config_wrong_resource_id(self, client) -> None:
+    def test_system_config_wrong_resource_id(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with wrong resource ID."""
         request_data = {
             "data": {
                 "type": "system-config",
                 "id": "wrong",
                 "attributes": {"logging": {"level": "DEBUG"}},
-            }
+            },
         }
 
         response = client.patch(
@@ -372,10 +385,10 @@ class TestSystemEndpoints:
         )
         assert response.status_code == 409  # Conflict
 
-    def test_system_config_wrong_resource_type(self, client) -> None:
+    def test_system_config_wrong_resource_type(self, client: Any) -> None:
         """Test PATCH /api/system/config endpoint with wrong resource type."""
         request_data = {
-            "data": {"type": "wrong-type", "id": "current", "attributes": {}}
+            "data": {"type": "wrong-type", "id": "current", "attributes": {}},
         }
 
         response = client.patch(

@@ -11,6 +11,9 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
 from flasgger import swag_from
 from flask import Flask, request
 
@@ -29,7 +32,7 @@ from .validation import (
 logger = logging.getLogger("battery_hawk.api.devices")
 
 
-def run_async(coro):
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
     """
     Run an async coroutine in a sync context.
 
@@ -45,7 +48,7 @@ def run_async(coro):
             # If we're already in an event loop, we need to use a different approach
             # This is a simplified version - in production you might want to use
             # asyncio.create_task() or similar
-            import concurrent.futures
+            import concurrent.futures  # noqa: PLC0415
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
@@ -74,7 +77,8 @@ class DeviceValidationError(Exception):
 
 
 def validate_device_data(
-    data: dict[str, Any], required_fields: list[str] | None = None
+    data: dict[str, Any],
+    required_fields: list[str] | None = None,
 ) -> None:
     """
     Validate device data according to JSON-API specification.
@@ -111,7 +115,8 @@ def validate_device_data(
 
 
 def format_device_resource(
-    device_data: dict[str, Any], mac_address: str
+    device_data: dict[str, Any],
+    mac_address: str,
 ) -> dict[str, Any]:
     """
     Format device data as JSON-API resource object.
@@ -147,40 +152,14 @@ def format_device_resource(
                 "data": {"type": "vehicles", "id": device_data.get("vehicle_id")}
                 if device_data.get("vehicle_id")
                 else None,
-            }
+            },
         },
     }
 
 
-def format_error_response(
-    message: str, status_code: int = 400, field: str | None = None
-) -> tuple[dict[str, Any], int]:
+def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # noqa: PLR0915
     """
-    Format error response according to JSON-API specification.
-
-    Args:
-        message: Error message
-        status_code: HTTP status code
-        field: Field that caused the error
-
-    Returns:
-        Tuple of (error response dict, status code)
-    """
-    error = {
-        "status": str(status_code),
-        "title": "Validation Error" if status_code == 400 else "Error",
-        "detail": message,
-    }
-
-    if field:
-        error["source"] = {"pointer": f"/data/attributes/{field}"}
-
-    return {"errors": [error]}, status_code
-
-
-def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
-    """
-    Setup device-related API routes.
+    Set up device-related API routes.
 
     Args:
         app: Flask application instance
@@ -234,11 +213,11 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                             },
                         },
                     },
-                }
+                },
             },
-        }
+        },
     )
-    def get_devices(validated_params: dict[str, Any]) -> dict[str, Any]:
+    def get_devices(validated_params: dict[str, Any]) -> tuple[dict[str, Any], int]:  # noqa: ARG001
         """
         Get all devices.
 
@@ -263,12 +242,12 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": "/api/devices"},
             }
 
-            logger.info("Retrieved %d devices", len(data))
-            return response
-
         except Exception as e:
             logger.exception("Error retrieving devices")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Retrieved %d devices", len(data))
+            return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["GET"])
     def get_device(mac_address: str) -> tuple[dict[str, Any], int]:
@@ -293,12 +272,12 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": f"/api/devices/{mac_address}"},
             }
 
-            logger.debug("Retrieved device: %s", mac_address)
-            return response, 200
-
         except Exception as e:
             logger.exception("Error retrieving device %s", mac_address)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved device: %s", mac_address)
+            return response, 200
 
     @app.route("/api/devices", methods=["POST"])
     @require_content_type("application/vnd.api+json")
@@ -325,13 +304,13 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                                 "properties": {
                                     "type": {"type": "string", "enum": ["devices"]},
                                     "attributes": {
-                                        "$ref": "#/definitions/DeviceAttributes"
+                                        "$ref": "#/definitions/DeviceAttributes",
                                     },
                                 },
-                            }
+                            },
                         },
                     },
-                }
+                },
             ],
             "responses": {
                 "201": {
@@ -339,7 +318,7 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     "schema": {
                         "type": "object",
                         "properties": {
-                            "data": {"$ref": "#/definitions/DeviceResource"}
+                            "data": {"$ref": "#/definitions/DeviceResource"},
                         },
                     },
                 },
@@ -347,7 +326,7 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "404": {"$ref": "#/responses/404"},
                 "409": {"$ref": "#/responses/409"},
             },
-        }
+        },
     )
     def configure_device(validated_data: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """
@@ -384,33 +363,39 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     friendly_name=friendly_name,
                     vehicle_id=vehicle_id,
                     polling_interval=polling_interval,
-                )
+                ),
             )
 
             if not success:
                 return format_error_response(
-                    f"Failed to configure device {mac_address}", 500
+                    f"Failed to configure device {mac_address}",
+                    500,
                 )
 
             # Get updated device data
             updated_device = core_engine.device_registry.get_device(mac_address)
+            if updated_device is None:
+                return format_error_response(
+                    f"Device {mac_address} not found after configuration",
+                    404,
+                )
 
             response = {
                 "data": format_device_resource(updated_device, mac_address),
                 "links": {"self": f"/api/devices/{mac_address}"},
             }
 
-            logger.info("Configured device: %s as %s", mac_address, device_type)
-            return response, 200
-
         except DeviceValidationError as e:
             return format_error_response(e.message, 400, e.field)
         except Exception as e:
             logger.exception("Error configuring device")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Configured device: %s as %s", mac_address, device_type)
+            return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["PATCH"])
-    def update_device(mac_address: str) -> tuple[dict[str, Any], int]:
+    def update_device(mac_address: str) -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update an existing device.
 
@@ -438,21 +423,25 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             # Validate resource ID matches URL parameter
             if "id" in resource and resource["id"] != mac_address:
                 return format_error_response(
-                    "Resource ID must match URL parameter", 409
+                    "Resource ID must match URL parameter",
+                    409,
                 )
 
             attributes = resource.get("attributes", {})
 
             # Extract update fields (only update provided fields)
             device_type = attributes.get(
-                "device_type", existing_device.get("device_type")
+                "device_type",
+                existing_device.get("device_type"),
             )
             friendly_name = attributes.get(
-                "friendly_name", existing_device.get("friendly_name")
+                "friendly_name",
+                existing_device.get("friendly_name"),
             )
             vehicle_id = attributes.get("vehicle_id", existing_device.get("vehicle_id"))
             polling_interval = attributes.get(
-                "polling_interval", existing_device.get("polling_interval", 3600)
+                "polling_interval",
+                existing_device.get("polling_interval", 3600),
             )
 
             # Update the device
@@ -463,30 +452,36 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     friendly_name=friendly_name,
                     vehicle_id=vehicle_id,
                     polling_interval=polling_interval,
-                )
+                ),
             )
 
             if not success:
                 return format_error_response(
-                    f"Failed to update device {mac_address}", 500
+                    f"Failed to update device {mac_address}",
+                    500,
                 )
 
             # Get updated device data
             updated_device = core_engine.device_registry.get_device(mac_address)
+            if updated_device is None:
+                return format_error_response(
+                    f"Device {mac_address} not found after update",
+                    404,
+                )
 
             response = {
                 "data": format_device_resource(updated_device, mac_address),
                 "links": {"self": f"/api/devices/{mac_address}"},
             }
 
-            logger.info("Updated device: %s", mac_address)
-            return response, 200
-
         except DeviceValidationError as e:
             return format_error_response(e.message, 400, e.field)
         except Exception as e:
             logger.exception("Error updating device %s", mac_address)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Updated device: %s", mac_address)
+            return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["DELETE"])
     def delete_device(mac_address: str) -> tuple[dict[str, Any], int]:
@@ -510,17 +505,17 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             if not success:
                 return format_error_response(
-                    f"Failed to delete device {mac_address}", 500
+                    f"Failed to delete device {mac_address}",
+                    500,
                 )
 
             # Also remove from state manager if present
             run_async(core_engine.state_manager.unregister_device(mac_address))
 
-            logger.info("Deleted device: %s", mac_address)
-
-            # Return 204 No Content for successful deletion
-            return {}, 204
-
         except Exception as e:
             logger.exception("Error deleting device %s", mac_address)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Deleted device: %s", mac_address)
+            # Return 204 No Content for successful deletion
+            return {}, 204

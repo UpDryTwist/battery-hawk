@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 import uuid
 from functools import wraps
-from typing import Any, Callable, Dict, List, Type
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from flask import request
 from marshmallow import Schema, ValidationError
@@ -25,9 +28,9 @@ class APIValidationError(Exception):
         self,
         message: str,
         status_code: int = 400,
-        error_code: str = None,
-        source: Dict[str, Any] = None,
-        meta: Dict[str, Any] = None,
+        error_code: str | None = None,
+        source: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize APIValidationError.
@@ -54,9 +57,9 @@ class APIError(Exception):
         self,
         message: str,
         status_code: int = 500,
-        error_code: str = None,
-        source: Dict[str, Any] = None,
-        meta: Dict[str, Any] = None,
+        error_code: str | None = None,
+        source: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize APIError.
@@ -76,7 +79,9 @@ class APIError(Exception):
         self.meta = meta
 
 
-def format_validation_errors(errors: Dict[str, Any]) -> List[Dict[str, Any]]:
+def format_validation_errors(
+    errors: dict[str, Any] | list[str],
+) -> list[dict[str, Any]]:
     """
     Format marshmallow validation errors into JSON-API error format.
 
@@ -88,7 +93,20 @@ def format_validation_errors(errors: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     formatted_errors = []
 
-    def process_errors(error_dict, path_prefix=""):
+    # Handle case where errors is a list of strings
+    if isinstance(errors, list):
+        for message in errors:
+            error = {
+                "id": str(uuid.uuid4()),
+                "status": "400",
+                "code": "VALIDATION_ERROR",
+                "title": "Validation Error",
+                "detail": str(message),
+            }
+            formatted_errors.append(error)
+        return formatted_errors
+
+    def process_errors(error_dict: dict[str, Any], path_prefix: str = "") -> None:
         """Recursively process nested error dictionaries."""
         for field_path, messages in error_dict.items():
             full_path = f"{path_prefix}/{field_path}" if path_prefix else field_path
@@ -127,11 +145,11 @@ def format_validation_errors(errors: Dict[str, Any]) -> List[Dict[str, Any]]:
 def format_error_response(
     message: str,
     status_code: int = 400,
-    error_code: str = None,
-    source: Dict[str, Any] = None,
-    meta: Dict[str, Any] = None,
-    error_id: str = None,
-) -> tuple[Dict[str, Any], int]:
+    error_code: str | None = None,
+    source: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
+    error_id: str | None = None,
+) -> tuple[dict[str, Any], int]:
     """
     Format a single error into JSON-API error response.
 
@@ -146,7 +164,7 @@ def format_error_response(
     Returns:
         Tuple of (error response dict, status code)
     """
-    error = {
+    error: dict[str, Any] = {
         "id": error_id or str(uuid.uuid4()),
         "status": str(status_code),
         "title": get_error_title(status_code),
@@ -190,9 +208,9 @@ def get_error_title(status_code: int) -> str:
     return titles.get(status_code, "Error")
 
 
-def validate_json_request(schema: Type[Schema]) -> Callable:
+def validate_json_request(schema: type[Schema]) -> Callable:
     """
-    Decorator to validate JSON request body using marshmallow schema.
+    Validate JSON request body using marshmallow schema.
 
     Args:
         schema: Marshmallow schema class for validation
@@ -203,13 +221,15 @@ def validate_json_request(schema: Type[Schema]) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 # Get request data
                 request_data = request.get_json()
                 if request_data is None:
                     return format_error_response(
-                        "Request body must contain valid JSON data", 400, "INVALID_JSON"
+                        "Request body must contain valid JSON data",
+                        400,
+                        "INVALID_JSON",
                     )
 
                 # Validate using schema
@@ -227,7 +247,9 @@ def validate_json_request(schema: Type[Schema]) -> Callable:
             except Exception as e:
                 logger.exception("Unexpected error in validation decorator")
                 return format_error_response(
-                    f"Internal server error: {e!s}", 500, "INTERNAL_ERROR"
+                    f"Internal server error: {e!s}",
+                    500,
+                    "INTERNAL_ERROR",
                 )
 
         return wrapper
@@ -235,9 +257,9 @@ def validate_json_request(schema: Type[Schema]) -> Callable:
     return decorator
 
 
-def validate_query_params(schema: Type[Schema]) -> Callable:
+def validate_query_params(schema: type[Schema]) -> Callable:
     """
-    Decorator to validate query parameters using marshmallow schema.
+    Validate query parameters using marshmallow schema.
 
     Args:
         schema: Marshmallow schema class for validation
@@ -248,7 +270,7 @@ def validate_query_params(schema: Type[Schema]) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 # Get query parameters
                 query_params = request.args.to_dict()
@@ -259,19 +281,7 @@ def validate_query_params(schema: Type[Schema]) -> Callable:
                     validated_params = schema_instance.load(query_params)
                 except ValidationError as e:
                     logger.warning("Query parameter validation error: %s", e.messages)
-                    formatted_errors = []
-                    for field, messages in e.messages.items():
-                        for message in messages:
-                            error = {
-                                "id": str(uuid.uuid4()),
-                                "status": "400",
-                                "code": "VALIDATION_ERROR",
-                                "title": "Query Parameter Validation Error",
-                                "detail": message,
-                                "source": {"parameter": field},
-                            }
-                            formatted_errors.append(error)
-
+                    formatted_errors = format_validation_errors(e.messages)
                     return {"errors": formatted_errors}, 400
 
                 # Add validated params to kwargs
@@ -281,7 +291,9 @@ def validate_query_params(schema: Type[Schema]) -> Callable:
             except Exception as e:
                 logger.exception("Unexpected error in query validation decorator")
                 return format_error_response(
-                    f"Internal server error: {e!s}", 500, "INTERNAL_ERROR"
+                    f"Internal server error: {e!s}",
+                    500,
+                    "INTERNAL_ERROR",
                 )
 
         return wrapper
@@ -291,7 +303,7 @@ def validate_query_params(schema: Type[Schema]) -> Callable:
 
 def handle_api_errors(func: Callable) -> Callable:
     """
-    Decorator to handle API exceptions and format error responses.
+    Handle API exceptions and format error responses.
 
     Args:
         func: Function to wrap
@@ -301,18 +313,26 @@ def handle_api_errors(func: Callable) -> Callable:
     """
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
         except APIValidationError as e:
             logger.warning("API validation error: %s", e.message)
             return format_error_response(
-                e.message, e.status_code, e.error_code, e.source, e.meta
+                e.message,
+                e.status_code,
+                e.error_code,
+                e.source,
+                e.meta,
             )
         except APIError as e:
-            logger.error("API error: %s", e.message)
+            logger.exception("API error: %s", e.message)
             return format_error_response(
-                e.message, e.status_code, e.error_code, e.source, e.meta
+                e.message,
+                e.status_code,
+                e.error_code,
+                e.source,
+                e.meta,
             )
         except Exception as e:
             logger.exception("Unexpected error in API endpoint")
@@ -328,7 +348,7 @@ def handle_api_errors(func: Callable) -> Callable:
 
 def require_content_type(content_type: str = "application/vnd.api+json") -> Callable:
     """
-    Decorator to require specific content type for requests.
+    Require specific content type for requests.
 
     Args:
         content_type: Required content type
@@ -339,17 +359,17 @@ def require_content_type(content_type: str = "application/vnd.api+json") -> Call
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            if request.method in ["POST", "PATCH", "PUT"]:
-                if not request.content_type or not request.content_type.startswith(
-                    content_type
-                ):
-                    return format_error_response(
-                        f"Content-Type must be '{content_type}'",
-                        415,  # Unsupported Media Type
-                        "UNSUPPORTED_MEDIA_TYPE",
-                        source={"header": "Content-Type"},
-                    )
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if request.method in ["POST", "PATCH", "PUT"] and (
+                not request.content_type
+                or not request.content_type.startswith(content_type)
+            ):
+                return format_error_response(
+                    f"Content-Type must be '{content_type}'",
+                    415,  # Unsupported Media Type
+                    "UNSUPPORTED_MEDIA_TYPE",
+                    source={"header": "Content-Type"},
+                )
             return func(*args, **kwargs)
 
         return wrapper
@@ -359,7 +379,7 @@ def require_content_type(content_type: str = "application/vnd.api+json") -> Call
 
 def validate_resource_id(resource_type: str) -> Callable:
     """
-    Decorator to validate that resource ID in URL matches request body.
+    Validate that resource ID in URL matches request body.
 
     Args:
         resource_type: Expected resource type
@@ -370,7 +390,7 @@ def validate_resource_id(resource_type: str) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             if request.method in ["PATCH", "PUT"]:
                 request_data = request.get_json()
                 if request_data and "data" in request_data:

@@ -798,7 +798,7 @@ def _print_device_information(device_info: dict[str, Any]) -> None:
             print(f"  {key.replace('_', ' ').title()}: {value}")  # noqa: T201
 
 
-def main(args: list[str] | None = None) -> int:  # noqa: PLR0911
+def main(args: list[str] | None = None) -> int:
     """
     Run the main program.
     This function is executed when you type `battery_hawk` or `python -m battery_hawk`.
@@ -828,6 +828,15 @@ def main(args: list[str] | None = None) -> int:  # noqa: PLR0911
         print(f"Error: Failed to initialize config manager: {e}", file=sys.stderr)  # noqa: T201
         return 1
 
+    # Ensure cleanup happens on exit
+    try:
+        return _handle_command(opts, config_manager)
+    finally:
+        config_manager.cleanup()
+
+
+def _handle_command(opts: argparse.Namespace, config_manager: ConfigManager) -> int:  # noqa: PLR0911
+    """Handle the CLI command with proper error handling."""
     if opts.command == "show":
         try:
             cfg = config_manager.get_config(opts.section)

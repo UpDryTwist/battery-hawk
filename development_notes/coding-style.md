@@ -23,6 +23,7 @@ This document outlines the coding standards and best practices for the Battery H
 ```python
 from __future__ import annotations
 
+
 def process_device(
     device_id: str,
     config: dict[str, Any],
@@ -49,14 +50,14 @@ def process_device(
 ```python
 def connect_device(device_id: str, timeout: float = 30.0) -> bool:
     """Connect to the specified device.
-    
+
     Args:
         device_id: MAC address of the device to connect to
         timeout: Connection timeout in seconds
-        
+
     Returns:
         True if connection successful, False otherwise
-        
+
     Raises:
         DeviceConnectionError: If device cannot be reached
     """
@@ -120,6 +121,7 @@ except Exception:
 ```python
 # ✅ Correct
 import tempfile
+
 with tempfile.TemporaryDirectory() as temp_dir:
     config_path = Path(temp_dir) / "config.json"
 
@@ -220,10 +222,11 @@ def load_config(config_path: Path) -> dict[str, Any]:
 ```python
 def setup_signal_handler(shutdown_event: asyncio.Event) -> None:
     """Set up signal handlers for graceful shutdown."""
+
     def signal_handler(signum: int, frame: Any) -> None:
         logger.info("Received signal %s, shutting down", signum)
         shutdown_event.set()
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 ```

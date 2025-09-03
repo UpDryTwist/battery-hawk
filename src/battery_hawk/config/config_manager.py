@@ -59,7 +59,32 @@ DEFAULTS: dict[str, dict] = {
                 },
             },
         },
-        "mqtt": {"enabled": False, "topic_prefix": "batteryhawk"},
+        "mqtt": {
+            "enabled": False,
+            "broker": "localhost",
+            "port": 1883,
+            "username": "",
+            "password": "",
+            "topic_prefix": "batteryhawk",
+            "qos": 1,
+            "keepalive": 60,
+            "timeout": 10,
+            "retries": 3,
+            "tls": False,
+            "ca_cert": "",
+            "cert_file": "",
+            "key_file": "",
+            # Resilience configuration
+            "max_retries": 10,
+            "initial_retry_delay": 1.0,
+            "max_retry_delay": 300.0,
+            "backoff_multiplier": 2.0,
+            "jitter_factor": 0.1,
+            "connection_timeout": 30.0,
+            "health_check_interval": 60.0,
+            "message_queue_size": 1000,
+            "message_retry_limit": 3,
+        },
         "api": {
             "enabled": True,
             "host": "0.0.0.0",  # nosec B104 - Configurable bind address  # noqa: S104
@@ -153,19 +178,27 @@ class ConfigReloadHandler(FileSystemEventHandler):
 class ConfigManager:
     """Manages Battery Hawk configuration files with hot-reload, schema validation, and env var overrides."""
 
-    def __init__(self, config_dir: str = "/data") -> None:
+    def __init__(
+        self,
+        config_dir: str = "/data",
+        *,
+        enable_watchers: bool = True,
+    ) -> None:
         """
         Initialize the ConfigManager.
 
         Args:
             config_dir: Directory where config files are stored.
+            enable_watchers: Whether to enable file watchers (default: True).
         """
         self.config_dir: str = config_dir
         self.configs: dict[str, dict] = {}
         self._listeners: list[Callable[[str, dict], None]] = []
         self.logger = logging.getLogger("battery_hawk.config")
+        self._enable_watchers = enable_watchers
         self._load_all_configs()
-        self._setup_watchers()
+        if self._enable_watchers:
+            self._setup_watchers()
 
     def _load_all_configs(self) -> None:
         """
@@ -301,6 +334,16 @@ class ConfigManager:
             daemon=True,
         )
         self._observer_thread.start()
+
+    def cleanup(self) -> None:
+        """Clean up resources, including stopping file watchers."""
+        if not self._enable_watchers:
+            return
+        if hasattr(self, "_observer") and self._observer.is_alive():
+            self._observer.stop()
+            self._observer.join(timeout=1.0)
+        if hasattr(self, "_observer_thread") and self._observer_thread.is_alive():
+            self._observer_thread.join(timeout=1.0)
 
     def _on_config_change(self, path: str) -> None:
         """

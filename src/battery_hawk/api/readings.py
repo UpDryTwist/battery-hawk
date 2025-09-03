@@ -12,15 +12,20 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
 from flask import Flask, request
 
 if TYPE_CHECKING:
     from battery_hawk.core.engine import BatteryHawkCore
 
+from .constants import HTTP_BAD_REQUEST, MAX_READINGS_LIMIT
+
 logger = logging.getLogger("battery_hawk.api.readings")
 
 
-def run_async(coro):
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
     """
     Run an async coroutine in a sync context.
 
@@ -33,7 +38,7 @@ def run_async(coro):
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            import concurrent.futures
+            import concurrent.futures  # noqa: PLC0415
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
@@ -45,7 +50,9 @@ def run_async(coro):
 
 
 def format_reading_resource(
-    reading_data: dict[str, Any], device_id: str, reading_id: str = None
+    reading_data: dict[str, Any],
+    device_id: str,
+    reading_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Format reading data as JSON-API resource object.
@@ -91,13 +98,15 @@ def format_reading_resource(
                     "related": f"/api/devices/{device_id}",
                 },
                 "data": {"type": "devices", "id": device_id},
-            }
+            },
         },
     }
 
 
 def format_error_response(
-    message: str, status_code: int = 400, field: str | None = None
+    message: str,
+    status_code: int = 400,
+    field: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     """
     Format error response according to JSON-API specification.
@@ -110,9 +119,9 @@ def format_error_response(
     Returns:
         Tuple of (error response dict, status code)
     """
-    error = {
+    error: dict[str, Any] = {
         "status": str(status_code),
-        "title": "Validation Error" if status_code == 400 else "Error",
+        "title": "Validation Error" if status_code == HTTP_BAD_REQUEST else "Error",
         "detail": message,
     }
 
@@ -141,8 +150,8 @@ def parse_query_params(request_args: dict) -> dict[str, Any]:
     limit = request_args.get("limit", "100")
     try:
         params["limit"] = int(limit)
-        if params["limit"] <= 0 or params["limit"] > 1000:
-            raise ValueError("Limit must be between 1 and 1000")
+        if params["limit"] <= 0 or params["limit"] > MAX_READINGS_LIMIT:
+            raise ValueError(f"Limit must be between 1 and {MAX_READINGS_LIMIT}")
     except ValueError as e:
         raise ValueError(f"Invalid limit parameter: {e}") from e
 
@@ -166,7 +175,7 @@ def parse_query_params(request_args: dict) -> dict[str, Any]:
         "current",
     ]:
         raise ValueError(
-            "Invalid sort parameter. Allowed: timestamp, -timestamp, voltage, -voltage, current, -current"
+            "Invalid sort parameter. Allowed: timestamp, -timestamp, voltage, -voltage, current, -current",
         )
     params["sort"] = sort
 
@@ -175,7 +184,7 @@ def parse_query_params(request_args: dict) -> dict[str, Any]:
         try:
             # Validate ISO format timestamp
             datetime.fromisoformat(
-                request_args["filter[start_time]"].replace("Z", "+00:00")
+                request_args["filter[start_time]"].replace("Z", "+00:00"),
             )
             params["start_time"] = request_args["filter[start_time]"]
         except ValueError as e:
@@ -184,7 +193,7 @@ def parse_query_params(request_args: dict) -> dict[str, Any]:
     if "filter[end_time]" in request_args:
         try:
             datetime.fromisoformat(
-                request_args["filter[end_time]"].replace("Z", "+00:00")
+                request_args["filter[end_time]"].replace("Z", "+00:00"),
             )
             params["end_time"] = request_args["filter[end_time]"]
         except ValueError as e:
@@ -195,7 +204,7 @@ def parse_query_params(request_args: dict) -> dict[str, Any]:
 
 def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
     """
-    Setup readings-related API routes.
+    Set up readings-related API routes.
 
     Args:
         app: Flask application instance
@@ -230,14 +239,15 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             storage_limit = max(params["offset"] + params["limit"], 100)
             readings = run_async(
                 core_engine.data_storage.get_recent_readings(
-                    device_id=mac_address, limit=storage_limit
-                )
+                    device_id=mac_address,
+                    limit=storage_limit,
+                ),
             )
 
             # Format as JSON-API resource collection
-            data = []
-            for reading in readings:
-                data.append(format_reading_resource(reading, mac_address))
+            data = [
+                format_reading_resource(reading, mac_address) for reading in readings
+            ]
 
             # Apply sorting (storage returns newest first by default)
             if params["sort"] == "timestamp":
@@ -255,7 +265,7 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             # Build pagination links
             links = {
-                "self": f"/api/readings/{mac_address}?limit={limit}&offset={offset}"
+                "self": f"/api/readings/{mac_address}?limit={limit}&offset={offset}",
             }
 
             if offset > 0:
@@ -281,14 +291,16 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": links,
             }
 
-            logger.debug(
-                "Retrieved %d readings for device: %s", len(paginated_data), mac_address
-            )
-            return response, 200
-
         except Exception as e:
             logger.exception("Error retrieving readings for device %s", mac_address)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug(
+                "Retrieved %d readings for device: %s",
+                len(paginated_data),
+                mac_address,
+            )
+            return response, 200
 
     @app.route("/api/readings/<mac_address>/latest", methods=["GET"])
     def get_latest_reading(mac_address: str) -> tuple[dict[str, Any], int]:
@@ -311,7 +323,8 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             device_state = core_engine.state_manager.get_device_state(mac_address)
             if not device_state or not device_state.latest_reading:
                 return format_error_response(
-                    f"No readings available for device {mac_address}", 404
+                    f"No readings available for device {mac_address}",
+                    404,
                 )
 
             # Convert BatteryInfo to dict format
@@ -344,11 +357,12 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": f"/api/readings/{mac_address}/latest"},
             }
 
-            logger.debug("Retrieved latest reading for device: %s", mac_address)
-            return response, 200
-
         except Exception as e:
             logger.exception(
-                "Error retrieving latest reading for device %s", mac_address
+                "Error retrieving latest reading for device %s",
+                mac_address,
             )
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved latest reading for device: %s", mac_address)
+            return response, 200

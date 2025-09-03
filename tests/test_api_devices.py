@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -32,10 +33,10 @@ class MockDeviceRegistry:
                     "retry_interval": 60,
                     "reconnection_delay": 300,
                 },
-            }
+            },
         }
 
-    def get_device(self, mac_address: str):
+    def get_device(self, mac_address: str) -> Any:
         """Get device by MAC address."""
         return self.devices.get(mac_address)
 
@@ -57,7 +58,7 @@ class MockDeviceRegistry:
                     "polling_interval": polling_interval,
                     "status": "configured",
                     "configured_at": "2025-01-01T10:05:00Z",
-                }
+                },
             )
             return True
         return False
@@ -112,13 +113,13 @@ class MockConfigManager(ConfigManager):
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Create a mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_core_engine():
+def mock_core_engine() -> MagicMock:
     """Create a mock core engine."""
     mock_engine = MagicMock(spec=BatteryHawkCore)
     mock_engine.running = True
@@ -128,13 +129,16 @@ def mock_core_engine():
 
 
 @pytest.fixture
-def api_instance(mock_config_manager, mock_core_engine):
+def api_instance(
+    mock_config_manager: MockConfigManager,
+    mock_core_engine: MagicMock,
+) -> BatteryHawkAPI:
     """Create a BatteryHawkAPI instance for testing."""
     return BatteryHawkAPI(mock_config_manager, mock_core_engine)
 
 
 @pytest.fixture
-def client(api_instance):
+def client(api_instance: BatteryHawkAPI) -> Any:
     """Create a test client."""
     return api_instance.app.test_client()
 
@@ -142,7 +146,7 @@ def client(api_instance):
 class TestDeviceEndpoints:
     """Test cases for device API endpoints."""
 
-    def test_get_devices(self, client) -> None:
+    def test_get_devices(self, client: Any) -> None:
         """Test GET /api/devices endpoint."""
         response = client.get("/api/devices")
         assert response.status_code == 200
@@ -160,7 +164,7 @@ class TestDeviceEndpoints:
         assert device["attributes"]["device_type"] == "BM6"
         assert device["attributes"]["friendly_name"] == "Test Device"
 
-    def test_get_device_found(self, client) -> None:
+    def test_get_device_found(self, client: Any) -> None:
         """Test GET /api/devices/{mac} endpoint for existing device."""
         response = client.get("/api/devices/AA:BB:CC:DD:EE:FF")
         assert response.status_code == 200
@@ -173,7 +177,7 @@ class TestDeviceEndpoints:
         assert device["id"] == "AA:BB:CC:DD:EE:FF"
         assert device["attributes"]["device_type"] == "BM6"
 
-    def test_get_device_not_found(self, client) -> None:
+    def test_get_device_not_found(self, client: Any) -> None:
         """Test GET /api/devices/{mac} endpoint for non-existing device."""
         response = client.get("/api/devices/XX:XX:XX:XX:XX:XX")
         assert response.status_code == 404
@@ -182,7 +186,7 @@ class TestDeviceEndpoints:
         assert "errors" in data
         assert data["errors"][0]["status"] == "404"
 
-    def test_configure_device_success(self, client) -> None:
+    def test_configure_device_success(self, client: Any) -> None:
         """Test POST /api/devices endpoint for device configuration."""
         request_data = {
             "data": {
@@ -194,7 +198,7 @@ class TestDeviceEndpoints:
                     "vehicle_id": "vehicle_2",
                     "polling_interval": 1800,
                 },
-            }
+            },
         }
 
         response = client.post(
@@ -210,7 +214,7 @@ class TestDeviceEndpoints:
         assert device["attributes"]["friendly_name"] == "Updated Test Device"
         assert device["attributes"]["vehicle_id"] == "vehicle_2"
 
-    def test_configure_device_not_found(self, client) -> None:
+    def test_configure_device_not_found(self, client: Any) -> None:
         """Test POST /api/devices endpoint for non-existing device."""
         request_data = {
             "data": {
@@ -220,7 +224,7 @@ class TestDeviceEndpoints:
                     "device_type": "BM6",
                     "friendly_name": "New Device",
                 },
-            }
+            },
         }
 
         response = client.post(
@@ -230,17 +234,17 @@ class TestDeviceEndpoints:
         )
         assert response.status_code == 404
 
-    def test_configure_device_validation_error(self, client) -> None:
+    def test_configure_device_validation_error(self, client: Any) -> None:
         """Test POST /api/devices endpoint with validation errors."""
         # Missing required fields
         request_data = {
             "data": {
                 "type": "devices",
                 "attributes": {
-                    "mac_address": "AA:BB:CC:DD:EE:FF"
+                    "mac_address": "AA:BB:CC:DD:EE:FF",
                     # Missing device_type and friendly_name
                 },
-            }
+            },
         }
 
         response = client.post(
@@ -253,7 +257,7 @@ class TestDeviceEndpoints:
         data = response.get_json()
         assert "errors" in data
 
-    def test_update_device_success(self, client) -> None:
+    def test_update_device_success(self, client: Any) -> None:
         """Test PATCH /api/devices/{mac} endpoint."""
         request_data = {
             "data": {
@@ -263,7 +267,7 @@ class TestDeviceEndpoints:
                     "friendly_name": "Updated Device Name",
                     "polling_interval": 7200,
                 },
-            }
+            },
         }
 
         response = client.patch(
@@ -278,14 +282,14 @@ class TestDeviceEndpoints:
         device = data["data"]
         assert device["attributes"]["friendly_name"] == "Updated Device Name"
 
-    def test_update_device_not_found(self, client) -> None:
+    def test_update_device_not_found(self, client: Any) -> None:
         """Test PATCH /api/devices/{mac} endpoint for non-existing device."""
         request_data = {
             "data": {
                 "type": "devices",
                 "id": "XX:XX:XX:XX:XX:XX",
                 "attributes": {"friendly_name": "Updated Name"},
-            }
+            },
         }
 
         response = client.patch(
@@ -295,12 +299,12 @@ class TestDeviceEndpoints:
         )
         assert response.status_code == 404
 
-    def test_delete_device_success(self, client) -> None:
+    def test_delete_device_success(self, client: Any) -> None:
         """Test DELETE /api/devices/{mac} endpoint."""
         response = client.delete("/api/devices/AA:BB:CC:DD:EE:FF")
         assert response.status_code == 204
 
-    def test_delete_device_not_found(self, client) -> None:
+    def test_delete_device_not_found(self, client: Any) -> None:
         """Test DELETE /api/devices/{mac} endpoint for non-existing device."""
         response = client.delete("/api/devices/XX:XX:XX:XX:XX:XX")
         assert response.status_code == 404

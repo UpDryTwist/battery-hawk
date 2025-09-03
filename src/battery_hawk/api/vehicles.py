@@ -8,18 +8,24 @@ specification for consistent data formatting and error handling.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 from typing import TYPE_CHECKING, Any
 
 from flask import Flask, request
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from battery_hawk.core.engine import BatteryHawkCore
+
+from .constants import HTTP_BAD_REQUEST
+from .devices import format_device_resource
 
 logger = logging.getLogger("battery_hawk.api.vehicles")
 
 
-def run_async(coro):
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
     """
     Run an async coroutine in a sync context.
 
@@ -33,8 +39,6 @@ def run_async(coro):
         loop = asyncio.get_event_loop()
         if loop.is_running():
             # If we're already in an event loop, we need to use a different approach
-            import concurrent.futures
-
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()
@@ -62,7 +66,8 @@ class VehicleValidationError(Exception):
 
 
 def validate_vehicle_data(
-    data: dict[str, Any], required_fields: list[str] | None = None
+    data: dict[str, Any],
+    required_fields: list[str] | None = None,
 ) -> None:
     """
     Validate vehicle data according to JSON-API specification.
@@ -99,7 +104,9 @@ def validate_vehicle_data(
 
 
 def format_vehicle_resource(
-    vehicle_data: dict[str, Any], vehicle_id: str, device_count: int = 0
+    vehicle_data: dict[str, Any],
+    vehicle_id: str,
+    device_count: int = 0,
 ) -> dict[str, Any]:
     """
     Format vehicle data as JSON-API resource object.
@@ -126,14 +133,16 @@ def format_vehicle_resource(
                 "links": {
                     "self": f"/api/vehicles/{vehicle_id}/relationships/devices",
                     "related": f"/api/vehicles/{vehicle_id}/devices",
-                }
-            }
+                },
+            },
         },
     }
 
 
 def format_error_response(
-    message: str, status_code: int = 400, field: str | None = None
+    message: str,
+    status_code: int = 400,
+    field: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     """
     Format error response according to JSON-API specification.
@@ -146,9 +155,9 @@ def format_error_response(
     Returns:
         Tuple of (error response dict, status code)
     """
-    error = {
+    error: dict[str, Any] = {
         "status": str(status_code),
-        "title": "Validation Error" if status_code == 400 else "Error",
+        "title": "Validation Error" if status_code == HTTP_BAD_REQUEST else "Error",
         "detail": message,
     }
 
@@ -158,9 +167,9 @@ def format_error_response(
     return {"errors": [error]}, status_code
 
 
-def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
+def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # noqa: PLR0915
     """
-    Setup vehicle-related API routes.
+    Set up vehicle-related API routes.
 
     Args:
         app: Flask application instance
@@ -168,7 +177,7 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
     """
 
     @app.route("/api/vehicles", methods=["GET"])
-    def get_vehicles() -> dict[str, Any]:
+    def get_vehicles() -> tuple[dict[str, Any], int]:
         """
         Get all vehicles.
 
@@ -184,10 +193,10 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             for vehicle_id, vehicle_data in vehicles.items():
                 # Get device count for this vehicle
                 device_count = len(
-                    core_engine.device_registry.get_devices_by_vehicle(vehicle_id)
+                    core_engine.device_registry.get_devices_by_vehicle(vehicle_id),
                 )
                 data.append(
-                    format_vehicle_resource(vehicle_data, vehicle_id, device_count)
+                    format_vehicle_resource(vehicle_data, vehicle_id, device_count),
                 )
 
             response = {
@@ -196,12 +205,12 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": "/api/vehicles"},
             }
 
-            logger.info("Retrieved %d vehicles", len(data))
-            return response
-
         except Exception as e:
             logger.exception("Error retrieving vehicles")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Retrieved %d vehicles", len(data))
+            return response, 200
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["GET"])
     def get_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:
@@ -223,7 +232,7 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             # Get device count for this vehicle
             device_count = len(
-                core_engine.device_registry.get_devices_by_vehicle(vehicle_id)
+                core_engine.device_registry.get_devices_by_vehicle(vehicle_id),
             )
 
             response = {
@@ -231,12 +240,12 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": f"/api/vehicles/{vehicle_id}"},
             }
 
-            logger.debug("Retrieved vehicle: %s", vehicle_id)
-            return response, 200
-
         except Exception as e:
             logger.exception("Error retrieving vehicle %s", vehicle_id)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved vehicle: %s", vehicle_id)
+            return response, 200
 
     @app.route("/api/vehicles", methods=["POST"])
     def create_vehicle() -> tuple[dict[str, Any], int]:
@@ -260,28 +269,33 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             # Create the vehicle
             vehicle_id = run_async(
-                core_engine.vehicle_registry.create_vehicle(name, custom_id)
+                core_engine.vehicle_registry.create_vehicle(name, custom_id),
             )
 
             # Get created vehicle data
             vehicle_data = core_engine.vehicle_registry.get_vehicle(vehicle_id)
+            if vehicle_data is None:
+                return format_error_response(
+                    f"Vehicle {vehicle_id} not found after creation",
+                    404,
+                )
 
             response = {
                 "data": format_vehicle_resource(vehicle_data, vehicle_id, 0),
                 "links": {"self": f"/api/vehicles/{vehicle_id}"},
             }
 
-            logger.info("Created vehicle: %s (%s)", vehicle_id, name)
-            return response, 201
-
         except VehicleValidationError as e:
             return format_error_response(e.message, 400, e.field)
         except Exception as e:
             logger.exception("Error creating vehicle")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Created vehicle: %s (%s)", vehicle_id, name)
+            return response, 201
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["PATCH"])
-    def update_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:
+    def update_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update an existing vehicle.
 
@@ -309,7 +323,8 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             # Validate resource ID matches URL parameter
             if "id" in resource and resource["id"] != vehicle_id:
                 return format_error_response(
-                    "Resource ID must match URL parameter", 409
+                    "Resource ID must match URL parameter",
+                    409,
                 )
 
             attributes = resource.get("attributes", {})
@@ -319,35 +334,44 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             # Update the vehicle
             success = run_async(
-                core_engine.vehicle_registry.update_vehicle_name(vehicle_id, name)
+                core_engine.vehicle_registry.update_vehicle_name(vehicle_id, name),
             )
 
             if not success:
                 return format_error_response(
-                    f"Failed to update vehicle {vehicle_id}", 500
+                    f"Failed to update vehicle {vehicle_id}",
+                    500,
                 )
 
             # Get updated vehicle data
             updated_vehicle = core_engine.vehicle_registry.get_vehicle(vehicle_id)
+            if updated_vehicle is None:
+                return format_error_response(
+                    f"Vehicle {vehicle_id} not found after update",
+                    404,
+                )
+
             device_count = len(
-                core_engine.device_registry.get_devices_by_vehicle(vehicle_id)
+                core_engine.device_registry.get_devices_by_vehicle(vehicle_id),
             )
 
             response = {
                 "data": format_vehicle_resource(
-                    updated_vehicle, vehicle_id, device_count
+                    updated_vehicle,
+                    vehicle_id,
+                    device_count,
                 ),
                 "links": {"self": f"/api/vehicles/{vehicle_id}"},
             }
-
-            logger.info("Updated vehicle: %s", vehicle_id)
-            return response, 200
 
         except VehicleValidationError as e:
             return format_error_response(e.message, 400, e.field)
         except Exception as e:
             logger.exception("Error updating vehicle %s", vehicle_id)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Updated vehicle: %s", vehicle_id)
+            return response, 200
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["DELETE"])
     def delete_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:
@@ -368,7 +392,7 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             # Check if vehicle has associated devices
             associated_devices = core_engine.device_registry.get_devices_by_vehicle(
-                vehicle_id
+                vehicle_id,
             )
             if associated_devices:
                 device_macs = [
@@ -386,17 +410,17 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
 
             if not success:
                 return format_error_response(
-                    f"Failed to delete vehicle {vehicle_id}", 500
+                    f"Failed to delete vehicle {vehicle_id}",
+                    500,
                 )
-
-            logger.info("Deleted vehicle: %s", vehicle_id)
-
-            # Return 204 No Content for successful deletion
-            return {}, 204
 
         except Exception as e:
             logger.exception("Error deleting vehicle %s", vehicle_id)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Deleted vehicle: %s", vehicle_id)
+            # Return 204 No Content for successful deletion
+            return {}, 204
 
     @app.route("/api/vehicles/<vehicle_id>/devices", methods=["GET"])
     def get_vehicle_devices(vehicle_id: str) -> tuple[dict[str, Any], int]:
@@ -419,8 +443,6 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             devices = core_engine.device_registry.get_devices_by_vehicle(vehicle_id)
 
             # Format as JSON-API resource collection
-            from .devices import format_device_resource
-
             data = []
             for device in devices:
                 mac_address = device.get("mac_address")
@@ -436,9 +458,9 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 },
             }
 
-            logger.debug("Retrieved %d devices for vehicle: %s", len(data), vehicle_id)
-            return response, 200
-
         except Exception as e:
             logger.exception("Error retrieving devices for vehicle %s", vehicle_id)
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved %d devices for vehicle: %s", len(data), vehicle_id)
+            return response, 200

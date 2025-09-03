@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,18 +23,18 @@ class MockVehicleRegistry:
                 "name": "Test Vehicle",
                 "created_at": "2025-01-01T10:00:00Z",
                 "device_count": 2,
-            }
+            },
         }
 
-    def get_vehicle(self, vehicle_id: str):
+    def get_vehicle(self, vehicle_id: str) -> Any:
         """Get vehicle by ID."""
         return self.vehicles.get(vehicle_id)
 
-    def get_all_vehicles(self):
+    def get_all_vehicles(self) -> list[Any]:
         """Get all vehicles."""
         return list(self.vehicles.values())
 
-    async def create_vehicle(self, name: str, vehicle_id: str | None = None):
+    async def create_vehicle(self, name: str, vehicle_id: str | None = None) -> Any:
         """Mock create vehicle."""
         if vehicle_id is None:
             vehicle_id = f"vehicle_{len(self.vehicles) + 1}"
@@ -83,7 +84,7 @@ class MockDeviceRegistry:
             },
         }
 
-    def get_devices_by_vehicle(self, vehicle_id: str):
+    def get_devices_by_vehicle(self, vehicle_id: str) -> list[Any]:
         """Get devices by vehicle ID."""
         return [
             device
@@ -126,13 +127,13 @@ class MockConfigManager(ConfigManager):
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Create a mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_core_engine():
+def mock_core_engine() -> MagicMock:
     """Create a mock core engine."""
     mock_engine = MagicMock(spec=BatteryHawkCore)
     mock_engine.running = True
@@ -142,13 +143,16 @@ def mock_core_engine():
 
 
 @pytest.fixture
-def api_instance(mock_config_manager, mock_core_engine):
+def api_instance(
+    mock_config_manager: MockConfigManager,
+    mock_core_engine: MagicMock,
+) -> BatteryHawkAPI:
     """Create a BatteryHawkAPI instance for testing."""
     return BatteryHawkAPI(mock_config_manager, mock_core_engine)
 
 
 @pytest.fixture
-def client(api_instance):
+def client(api_instance: BatteryHawkAPI) -> Any:
     """Create a test client."""
     return api_instance.app.test_client()
 
@@ -156,7 +160,7 @@ def client(api_instance):
 class TestVehicleEndpoints:
     """Test cases for vehicle API endpoints."""
 
-    def test_get_vehicles(self, client) -> None:
+    def test_get_vehicles(self, client: Any) -> None:
         """Test GET /api/vehicles endpoint."""
         response = client.get("/api/vehicles")
         assert response.status_code == 200
@@ -174,7 +178,7 @@ class TestVehicleEndpoints:
         assert vehicle["attributes"]["name"] == "Test Vehicle"
         assert vehicle["attributes"]["device_count"] == 2
 
-    def test_get_vehicle_found(self, client) -> None:
+    def test_get_vehicle_found(self, client: Any) -> None:
         """Test GET /api/vehicles/{id} endpoint for existing vehicle."""
         response = client.get("/api/vehicles/vehicle_1")
         assert response.status_code == 200
@@ -187,7 +191,7 @@ class TestVehicleEndpoints:
         assert vehicle["id"] == "vehicle_1"
         assert vehicle["attributes"]["name"] == "Test Vehicle"
 
-    def test_get_vehicle_not_found(self, client) -> None:
+    def test_get_vehicle_not_found(self, client: Any) -> None:
         """Test GET /api/vehicles/{id} endpoint for non-existing vehicle."""
         response = client.get("/api/vehicles/nonexistent")
         assert response.status_code == 404
@@ -196,10 +200,10 @@ class TestVehicleEndpoints:
         assert "errors" in data
         assert data["errors"][0]["status"] == "404"
 
-    def test_create_vehicle_success(self, client) -> None:
+    def test_create_vehicle_success(self, client: Any) -> None:
         """Test POST /api/vehicles endpoint for vehicle creation."""
         request_data = {
-            "data": {"type": "vehicles", "attributes": {"name": "New Test Vehicle"}}
+            "data": {"type": "vehicles", "attributes": {"name": "New Test Vehicle"}},
         }
 
         response = client.post(
@@ -215,13 +219,13 @@ class TestVehicleEndpoints:
         assert vehicle["attributes"]["name"] == "New Test Vehicle"
         assert vehicle["attributes"]["device_count"] == 0
 
-    def test_create_vehicle_with_custom_id(self, client) -> None:
+    def test_create_vehicle_with_custom_id(self, client: Any) -> None:
         """Test POST /api/vehicles endpoint with custom ID."""
         request_data = {
             "data": {
                 "type": "vehicles",
                 "attributes": {"name": "Custom ID Vehicle", "id": "custom_vehicle_id"},
-            }
+            },
         }
 
         response = client.post(
@@ -236,7 +240,7 @@ class TestVehicleEndpoints:
         vehicle = data["data"]
         assert vehicle["id"] == "custom_vehicle_id"
 
-    def test_create_vehicle_validation_error(self, client) -> None:
+    def test_create_vehicle_validation_error(self, client: Any) -> None:
         """Test POST /api/vehicles endpoint with validation errors."""
         # Missing required name field
         request_data = {"data": {"type": "vehicles", "attributes": {}}}
@@ -251,14 +255,14 @@ class TestVehicleEndpoints:
         data = response.get_json()
         assert "errors" in data
 
-    def test_update_vehicle_success(self, client) -> None:
+    def test_update_vehicle_success(self, client: Any) -> None:
         """Test PATCH /api/vehicles/{id} endpoint."""
         request_data = {
             "data": {
                 "type": "vehicles",
                 "id": "vehicle_1",
                 "attributes": {"name": "Updated Vehicle Name"},
-            }
+            },
         }
 
         response = client.patch(
@@ -273,14 +277,14 @@ class TestVehicleEndpoints:
         vehicle = data["data"]
         assert vehicle["attributes"]["name"] == "Updated Vehicle Name"
 
-    def test_update_vehicle_not_found(self, client) -> None:
+    def test_update_vehicle_not_found(self, client: Any) -> None:
         """Test PATCH /api/vehicles/{id} endpoint for non-existing vehicle."""
         request_data = {
             "data": {
                 "type": "vehicles",
                 "id": "nonexistent",
                 "attributes": {"name": "Updated Name"},
-            }
+            },
         }
 
         response = client.patch(
@@ -290,7 +294,7 @@ class TestVehicleEndpoints:
         )
         assert response.status_code == 404
 
-    def test_delete_vehicle_with_devices_fails(self, client) -> None:
+    def test_delete_vehicle_with_devices_fails(self, client: Any) -> None:
         """Test DELETE /api/vehicles/{id} endpoint fails when vehicle has devices."""
         response = client.delete("/api/vehicles/vehicle_1")
         assert response.status_code == 409  # Conflict - has associated devices
@@ -299,12 +303,16 @@ class TestVehicleEndpoints:
         assert "errors" in data
         assert "associated devices" in data["errors"][0]["detail"]
 
-    def test_delete_vehicle_not_found(self, client) -> None:
+    def test_delete_vehicle_not_found(self, client: Any) -> None:
         """Test DELETE /api/vehicles/{id} endpoint for non-existing vehicle."""
         response = client.delete("/api/vehicles/nonexistent")
         assert response.status_code == 404
 
-    def test_delete_vehicle_success(self, client, mock_core_engine) -> None:
+    def test_delete_vehicle_success(
+        self,
+        client: Any,
+        mock_core_engine: MagicMock,
+    ) -> None:
         """Test DELETE /api/vehicles/{id} endpoint succeeds when vehicle has no devices."""
         # Create a vehicle with no devices
         mock_core_engine.vehicle_registry.vehicles["empty_vehicle"] = {
@@ -316,7 +324,7 @@ class TestVehicleEndpoints:
         # Mock get_devices_by_vehicle to return empty list for this vehicle
         original_method = mock_core_engine.device_registry.get_devices_by_vehicle
 
-        def mock_get_devices_by_vehicle(vehicle_id):
+        def mock_get_devices_by_vehicle(vehicle_id: str) -> list[Any]:
             if vehicle_id == "empty_vehicle":
                 return []
             return original_method(vehicle_id)
@@ -328,7 +336,7 @@ class TestVehicleEndpoints:
         response = client.delete("/api/vehicles/empty_vehicle")
         assert response.status_code == 204
 
-    def test_get_vehicle_devices(self, client) -> None:
+    def test_get_vehicle_devices(self, client: Any) -> None:
         """Test GET /api/vehicles/{id}/devices endpoint."""
         response = client.get("/api/vehicles/vehicle_1/devices")
         assert response.status_code == 200
@@ -345,7 +353,7 @@ class TestVehicleEndpoints:
         assert device["type"] == "devices"
         assert "mac_address" in device["attributes"]
 
-    def test_get_vehicle_devices_not_found(self, client) -> None:
+    def test_get_vehicle_devices_not_found(self, client: Any) -> None:
         """Test GET /api/vehicles/{id}/devices endpoint for non-existing vehicle."""
         response = client.get("/api/vehicles/nonexistent/devices")
         assert response.status_code == 404

@@ -12,15 +12,26 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
 from flask import Flask, request
 
 if TYPE_CHECKING:
     from battery_hawk.core.engine import BatteryHawkCore
 
+from .constants import (
+    HTTP_BAD_REQUEST,
+    MAX_API_PORT,
+    MAX_BLUETOOTH_CONNECTIONS,
+    MIN_API_PORT,
+    MIN_BLUETOOTH_CONNECTIONS,
+)
+
 logger = logging.getLogger("battery_hawk.api.system")
 
 
-def run_async(coro):
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
     """
     Run an async coroutine in a sync context.
 
@@ -33,7 +44,7 @@ def run_async(coro):
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            import concurrent.futures
+            import concurrent.futures  # noqa: PLC0415
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
@@ -127,7 +138,9 @@ def format_system_status_resource(status_data: dict[str, Any]) -> dict[str, Any]
 
 
 def format_error_response(
-    message: str, status_code: int = 400, field: str | None = None
+    message: str,
+    status_code: int = 400,
+    field: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     """
     Format error response according to JSON-API specification.
@@ -140,9 +153,9 @@ def format_error_response(
     Returns:
         Tuple of (error response dict, status code)
     """
-    error = {
+    error: dict[str, Any] = {
         "status": str(status_code),
-        "title": "Validation Error" if status_code == 400 else "Error",
+        "title": "Validation Error" if status_code == HTTP_BAD_REQUEST else "Error",
         "detail": message,
     }
 
@@ -152,7 +165,7 @@ def format_error_response(
     return {"errors": [error]}, status_code
 
 
-def safe_json_value(value):
+def safe_json_value(value: Any) -> Any:
     """Convert a value to a JSON-serializable type."""
     if value is None:
         return None
@@ -166,13 +179,13 @@ def safe_json_value(value):
     try:
         # Try to convert to string
         return str(value)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
-def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
+def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # noqa: PLR0915
     """
-    Setup system-related API routes.
+    Set up system-related API routes.
 
     Args:
         app: Flask application instance
@@ -180,7 +193,7 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
     """
 
     @app.route("/api/system/config", methods=["GET"])
-    def get_system_config() -> dict[str, Any]:
+    def get_system_config() -> tuple[dict[str, Any], int]:
         """
         Get current system configuration.
 
@@ -196,15 +209,15 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": "/api/system/config"},
             }
 
-            logger.debug("Retrieved system configuration")
-            return response
-
         except Exception as e:
             logger.exception("Error retrieving system configuration")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved system configuration")
+            return response, 200
 
     @app.route("/api/system/config", methods=["PATCH"])
-    def update_system_config() -> tuple[dict[str, Any], int]:
+    def update_system_config() -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update system configuration.
 
@@ -275,27 +288,35 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     "CRITICAL",
                 ]:
                     return format_error_response(
-                        "Invalid logging level", 400, "logging.level"
+                        "Invalid logging level",
+                        400,
+                        "logging.level",
                     )
 
             if "bluetooth" in attributes:
                 max_conn = attributes["bluetooth"].get("max_concurrent_connections")
                 if max_conn is not None and (
-                    not isinstance(max_conn, int) or max_conn < 1 or max_conn > 10
+                    not isinstance(max_conn, int)
+                    or max_conn < MIN_BLUETOOTH_CONNECTIONS
+                    or max_conn > MAX_BLUETOOTH_CONNECTIONS
                 ):
                     return format_error_response(
-                        "max_concurrent_connections must be between 1 and 10",
-                        400,
+                        f"max_concurrent_connections must be between {MIN_BLUETOOTH_CONNECTIONS} and {MAX_BLUETOOTH_CONNECTIONS}",
+                        HTTP_BAD_REQUEST,
                         "bluetooth.max_concurrent_connections",
                     )
 
             if "api" in attributes:
                 port = attributes["api"].get("port")
                 if port is not None and (
-                    not isinstance(port, int) or port < 1024 or port > 65535
+                    not isinstance(port, int)
+                    or port < MIN_API_PORT
+                    or port > MAX_API_PORT
                 ):
                     return format_error_response(
-                        "API port must be between 1024 and 65535", 400, "api.port"
+                        f"API port must be between {MIN_API_PORT} and {MAX_API_PORT}",
+                        HTTP_BAD_REQUEST,
+                        "api.port",
                     )
 
             # Update the configuration
@@ -307,17 +328,17 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": "/api/system/config"},
             }
 
-            logger.info("Updated system configuration")
-            return response, 200
-
         except SystemValidationError as e:
             return format_error_response(e.message, 400, e.field)
         except Exception as e:
             logger.exception("Error updating system configuration")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.info("Updated system configuration")
+            return response, 200
 
     @app.route("/api/system/status", methods=["GET"])
-    def get_system_status() -> dict[str, Any]:
+    def get_system_status() -> tuple[dict[str, Any], int]:
         """
         Get current system status.
 
@@ -340,7 +361,7 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                         storage_health = storage_health.__dict__
                     if hasattr(storage_metrics, "__dict__"):
                         storage_metrics = storage_metrics.__dict__
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # If health status retrieval fails, use None
                     storage_health = None
                     storage_metrics = None
@@ -357,7 +378,7 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     "device_registry": {
                         "total_devices": len(core_engine.device_registry.devices),
                         "configured_devices": len(
-                            core_engine.device_registry.get_configured_devices()
+                            core_engine.device_registry.get_configured_devices(),
                         ),
                     },
                     "vehicle_registry": {
@@ -366,15 +387,17 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     "discovery_service": {
                         "discovered_devices": len(
                             getattr(
-                                core_engine.discovery_service, "discovered_devices", {}
-                            )
+                                core_engine.discovery_service,
+                                "discovered_devices",
+                                {},
+                            ),
                         ),
                         "scanning": bool(
-                            getattr(core_engine.discovery_service, "scanning", False)
+                            getattr(core_engine.discovery_service, "scanning", False),
                         ),
                     },
                     "state_manager": safe_json_value(
-                        core_status.get("state_manager", {})
+                        core_status.get("state_manager", {}),
                     ),
                 },
             }
@@ -384,12 +407,12 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                 "links": {"self": "/api/system/status"},
             }
 
-            logger.debug("Retrieved system status")
-            return response
-
         except Exception as e:
             logger.exception("Error retrieving system status")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug("Retrieved system status")
+            return response, 200
 
     @app.route("/api/system/health", methods=["GET"])
     def get_system_health() -> tuple[dict[str, Any], int]:
@@ -426,15 +449,17 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
                     "id": "current",
                     "attributes": health_data,
                     "links": {"self": "/api/system/health"},
-                }
+                },
             }
 
             status_code = 200 if overall_healthy else 503
-            logger.debug(
-                "System health check: %s", "healthy" if overall_healthy else "unhealthy"
-            )
-            return response, status_code
 
         except Exception as e:
             logger.exception("Error performing system health check")
             return format_error_response(f"Internal server error: {e!s}", 500)
+        else:
+            logger.debug(
+                "System health check: %s",
+                "healthy" if overall_healthy else "unhealthy",
+            )
+            return response, status_code

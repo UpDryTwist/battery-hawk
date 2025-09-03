@@ -79,28 +79,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def process_device_reading(
-    device_id: str,
-    reading_data: Dict[str, Any],
-    timeout: Optional[float] = None
+    device_id: str, reading_data: Dict[str, Any], timeout: Optional[float] = None
 ) -> bool:
     """
     Process a device reading and store it in the database.
-    
+
     Args:
         device_id: MAC address of the device
         reading_data: Dictionary containing reading values
         timeout: Optional timeout for the operation
-        
+
     Returns:
         True if processing was successful, False otherwise
-        
+
     Raises:
         ValidationError: If reading data is invalid
         DatabaseError: If storage operation fails
     """
     logger.info("Processing reading for device %s", device_id)
-    
+
     # Implementation here
     return True
 ```
@@ -122,19 +121,20 @@ from unittest.mock import MagicMock
 
 from src.battery_hawk.core.device import DeviceManager
 
+
 class TestDeviceManager:
     """Test cases for DeviceManager."""
-    
+
     @pytest.fixture
     def mock_bluetooth_adapter(self):
         """Create a mock bluetooth adapter."""
         return MagicMock()
-    
+
     @pytest.fixture
     def device_manager(self, mock_bluetooth_adapter):
         """Create a DeviceManager instance for testing."""
         return DeviceManager(mock_bluetooth_adapter)
-    
+
     def test_device_discovery(self, device_manager):
         """Test device discovery functionality."""
         # Test implementation

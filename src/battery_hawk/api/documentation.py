@@ -7,8 +7,12 @@ with comprehensive endpoint descriptions and examples.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from flasgger import Swagger
-from flask import Flask
+
+if TYPE_CHECKING:
+    from flask import Flask
 
 
 def configure_swagger(app: Flask) -> Swagger:
@@ -27,9 +31,9 @@ def configure_swagger(app: Flask) -> Swagger:
             {
                 "endpoint": "apispec",
                 "route": "/api/docs/apispec.json",
-                "rule_filter": lambda rule: True,  # Include all endpoints
-                "model_filter": lambda tag: True,  # Include all models
-            }
+                "rule_filter": lambda _rule: True,  # Include all endpoints
+                "model_filter": lambda _tag: True,  # Include all models
+            },
         ],
         "static_url_path": "/api/docs/static",
         "swagger_ui": True,
@@ -128,7 +132,7 @@ Legacy endpoints without version prefix default to v1.
                 "in": "header",
                 "name": "X-API-Key",
                 "description": "API key for authentication (future implementation)",
-            }
+            },
         },
         "definitions": {
             "Error": {
@@ -178,7 +182,7 @@ Legacy endpoints without version prefix default to v1.
                         "type": "array",
                         "items": {"$ref": "#/definitions/Error"},
                         "description": "Array of error objects",
-                    }
+                    },
                 },
             },
             "DeviceAttributes": {

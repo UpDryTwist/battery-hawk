@@ -7,7 +7,16 @@ following JSON-API specification.
 
 from __future__ import annotations
 
+from typing import Any
+
 from marshmallow import Schema, ValidationError, fields, validate, validates_schema
+
+from .constants import (
+    MAX_API_PORT,
+    MAX_BLUETOOTH_CONNECTIONS,
+    MIN_API_PORT,
+    MIN_BLUETOOTH_CONNECTIONS,
+)
 
 
 class DeviceAttributesSchema(Schema):
@@ -124,27 +133,34 @@ class ReadingAttributesSchema(Schema):
     """Schema for reading attributes."""
 
     device_id = fields.Str(
-        dump_only=True, metadata={"description": "Device MAC address"}
+        dump_only=True,
+        metadata={"description": "Device MAC address"},
     )
     timestamp = fields.DateTime(
-        dump_only=True, metadata={"description": "Reading timestamp"}
+        dump_only=True,
+        metadata={"description": "Reading timestamp"},
     )
     voltage = fields.Float(
-        allow_none=True, metadata={"description": "Voltage in volts"}
+        allow_none=True,
+        metadata={"description": "Voltage in volts"},
     )
     current = fields.Float(
-        allow_none=True, metadata={"description": "Current in amperes"}
+        allow_none=True,
+        metadata={"description": "Current in amperes"},
     )
     temperature = fields.Float(
-        allow_none=True, metadata={"description": "Temperature in Celsius"}
+        allow_none=True,
+        metadata={"description": "Temperature in Celsius"},
     )
     state_of_charge = fields.Float(
-        allow_none=True, metadata={"description": "State of charge percentage"}
+        allow_none=True,
+        metadata={"description": "State of charge percentage"},
     )
     power = fields.Float(allow_none=True, metadata={"description": "Power in watts"})
     device_type = fields.Str(allow_none=True, metadata={"description": "Device type"})
     vehicle_id = fields.Str(
-        allow_none=True, metadata={"description": "Associated vehicle ID"}
+        allow_none=True,
+        metadata={"description": "Associated vehicle ID"},
     )
 
 
@@ -201,33 +217,43 @@ class SystemConfigAttributesSchema(Schema):
     )
 
     @validates_schema
-    def validate_logging_level(self, data, **kwargs):
+    def validate_logging_level(self, data: dict[str, Any], **_kwargs: Any) -> None:
         """Validate logging level if present."""
         if "logging" in data and "level" in data["logging"]:
             level = data["logging"]["level"]
             valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
             if level not in valid_levels:
                 raise ValidationError(
-                    f"Invalid logging level. Must be one of: {valid_levels}"
+                    f"Invalid logging level. Must be one of: {valid_levels}",
                 )
 
     @validates_schema
-    def validate_bluetooth_connections(self, data, **kwargs):
+    def validate_bluetooth_connections(
+        self,
+        data: dict[str, Any],
+        **_kwargs: Any,
+    ) -> None:
         """Validate bluetooth max connections if present."""
         if "bluetooth" in data and "max_concurrent_connections" in data["bluetooth"]:
             max_conn = data["bluetooth"]["max_concurrent_connections"]
-            if not isinstance(max_conn, int) or max_conn < 1 or max_conn > 10:
+            if (
+                not isinstance(max_conn, int)
+                or max_conn < MIN_BLUETOOTH_CONNECTIONS
+                or max_conn > MAX_BLUETOOTH_CONNECTIONS
+            ):
                 raise ValidationError(
-                    "max_concurrent_connections must be between 1 and 10"
+                    f"max_concurrent_connections must be between {MIN_BLUETOOTH_CONNECTIONS} and {MAX_BLUETOOTH_CONNECTIONS}",
                 )
 
     @validates_schema
-    def validate_api_port(self, data, **kwargs):
+    def validate_api_port(self, data: dict[str, Any], **_kwargs: Any) -> None:
         """Validate API port if present."""
         if "api" in data and "port" in data["api"]:
             port = data["api"]["port"]
-            if not isinstance(port, int) or port < 1024 or port > 65535:
-                raise ValidationError("API port must be between 1024 and 65535")
+            if not isinstance(port, int) or port < MIN_API_PORT or port > MAX_API_PORT:
+                raise ValidationError(
+                    f"API port must be between {MIN_API_PORT} and {MAX_API_PORT}",
+                )
 
 
 class SystemConfigResourceSchema(Schema):
@@ -271,13 +297,16 @@ class SystemStatusAttributesSchema(Schema):
 
     core = fields.Dict(dump_only=True, metadata={"description": "Core engine status"})
     storage = fields.Dict(
-        dump_only=True, metadata={"description": "Storage system status"}
+        dump_only=True,
+        metadata={"description": "Storage system status"},
     )
     components = fields.Dict(
-        dump_only=True, metadata={"description": "Component status"}
+        dump_only=True,
+        metadata={"description": "Component status"},
     )
     timestamp = fields.DateTime(
-        dump_only=True, metadata={"description": "Status timestamp"}
+        dump_only=True,
+        metadata={"description": "Status timestamp"},
     )
 
 
@@ -285,7 +314,9 @@ class SystemStatusResourceSchema(Schema):
     """Schema for system status resource in JSON-API format."""
 
     id = fields.Str(
-        dump_only=True, dump_default="current", metadata={"description": "Status ID"}
+        dump_only=True,
+        dump_default="current",
+        metadata={"description": "Status ID"},
     )
     type = fields.Str(
         dump_only=True,
@@ -305,13 +336,16 @@ class SystemHealthAttributesSchema(Schema):
     """Schema for system health attributes."""
 
     healthy = fields.Bool(
-        dump_only=True, metadata={"description": "Overall system health"}
+        dump_only=True,
+        metadata={"description": "Overall system health"},
     )
     components = fields.Dict(
-        dump_only=True, metadata={"description": "Component health status"}
+        dump_only=True,
+        metadata={"description": "Component health status"},
     )
     timestamp = fields.DateTime(
-        dump_only=True, metadata={"description": "Health check timestamp"}
+        dump_only=True,
+        metadata={"description": "Health check timestamp"},
     )
 
 
@@ -341,21 +375,26 @@ class ErrorSchema(Schema):
     """Schema for error responses following JSON-API specification."""
 
     id = fields.Str(
-        allow_none=True, metadata={"description": "Unique error identifier"}
+        allow_none=True,
+        metadata={"description": "Unique error identifier"},
     )
     status = fields.Str(required=True, metadata={"description": "HTTP status code"})
     code = fields.Str(
-        allow_none=True, metadata={"description": "Application-specific error code"}
+        allow_none=True,
+        metadata={"description": "Application-specific error code"},
     )
     title = fields.Str(required=True, metadata={"description": "Short error summary"})
     detail = fields.Str(
-        required=True, metadata={"description": "Detailed error description"}
+        required=True,
+        metadata={"description": "Detailed error description"},
     )
     source = fields.Dict(
-        allow_none=True, metadata={"description": "Error source information"}
+        allow_none=True,
+        metadata={"description": "Error source information"},
     )
     meta = fields.Dict(
-        allow_none=True, metadata={"description": "Additional error metadata"}
+        allow_none=True,
+        metadata={"description": "Additional error metadata"},
     )
 
 
@@ -391,7 +430,7 @@ class ReadingsQuerySchema(Schema):
                 "-current",
                 "temperature",
                 "-temperature",
-            ]
+            ],
         ),
         metadata={"description": "Sort field and direction"},
     )

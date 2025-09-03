@@ -10,12 +10,16 @@ from __future__ import annotations
 import logging
 import time
 from functools import wraps
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from flask import Flask, g, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+from .constants import MIN_API_PATH_COMPONENTS
 from .validation import format_error_response
 
 logger = logging.getLogger("battery_hawk.api.middleware")
@@ -33,10 +37,10 @@ def configure_rate_limiting(app: Flask) -> Limiter:
     """
 
     # Custom key function that considers both IP and user agent
-    def get_rate_limit_key():
+    def get_rate_limit_key() -> str:
         """Generate rate limit key based on IP and user agent."""
         ip = get_remote_address()
-        user_agent = request.headers.get("User-Agent", "unknown")
+        _user_agent = request.headers.get("User-Agent", "unknown")
         # Use just IP for now, but could extend to include user agent
         return ip
 
@@ -51,15 +55,13 @@ def configure_rate_limiting(app: Flask) -> Limiter:
 
     # Custom rate limit exceeded handler
     @limiter.request_filter
-    def rate_limit_filter():
+    def rate_limit_filter() -> bool:
         """Filter requests that should not be rate limited."""
         # Don't rate limit health checks
-        if request.endpoint in ["health_check", "get_system_health"]:
-            return True
-        return False
+        return request.endpoint in ["health_check", "get_system_health"]
 
     @app.errorhandler(429)
-    def rate_limit_exceeded(error):
+    def rate_limit_exceeded(error: Any) -> tuple[dict[str, Any], int]:
         """Handle rate limit exceeded errors."""
         logger.warning(
             "Rate limit exceeded for %s %s from %s",
@@ -91,7 +93,7 @@ def configure_request_logging(app: Flask) -> None:
     """
 
     @app.before_request
-    def log_request_info():
+    def log_request_info() -> None:
         """Log incoming request information."""
         g.start_time = time.time()
 
@@ -110,7 +112,7 @@ def configure_request_logging(app: Flask) -> None:
             logger.debug("Request contains JSON data")
 
     @app.after_request
-    def log_response_info(response):
+    def log_response_info(response: Any) -> Any:
         """Log response information."""
         duration = time.time() - g.get("start_time", time.time())
 
@@ -137,7 +139,7 @@ def configure_cors_headers(app: Flask) -> None:
     """
 
     @app.after_request
-    def add_cors_headers(response):
+    def add_cors_headers(response: Any) -> Any:
         """Add additional CORS headers."""
         # Allow common headers
         response.headers["Access-Control-Allow-Headers"] = (
@@ -166,7 +168,7 @@ def configure_security_headers(app: Flask) -> None:
     """
 
     @app.after_request
-    def add_security_headers(response):
+    def add_security_headers(response: Any) -> Any:
         """Add security headers to responses."""
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -193,15 +195,15 @@ def configure_security_headers(app: Flask) -> None:
         else:
             # Strict CSP for API endpoints
             response.headers["Content-Security-Policy"] = (
-                "default-src 'none'; " "script-src 'none'; " "style-src 'none'"
+                "default-src 'none'; script-src 'none'; style-src 'none'"
             )
 
         return response
 
 
-def require_api_key(api_key: Optional[str] = None) -> Callable:
+def require_api_key(api_key: str | None = None) -> Callable:
     """
-    Decorator to require API key authentication.
+    Require API key authentication.
 
     Args:
         api_key: Expected API key (if None, authentication is disabled)
@@ -212,7 +214,7 @@ def require_api_key(api_key: Optional[str] = None) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             if api_key is None:
                 # Authentication disabled
                 return func(*args, **kwargs)
@@ -263,12 +265,12 @@ def configure_api_versioning(app: Flask) -> None:
     """
 
     @app.before_request
-    def handle_api_versioning():
+    def handle_api_versioning() -> tuple[dict[str, Any], int] | None:
         """Handle API version routing."""
         # Extract version from URL path
         path_parts = request.path.strip("/").split("/")
 
-        if len(path_parts) >= 2 and path_parts[0] == "api":
+        if len(path_parts) >= MIN_API_PATH_COMPONENTS and path_parts[0] == "api":
             # Check if second part is a version (v1, v2, etc.)
             if path_parts[1].startswith("v") and path_parts[1][1:].isdigit():
                 version = path_parts[1]
@@ -285,9 +287,10 @@ def configure_api_versioning(app: Flask) -> None:
             else:
                 # Default to v1 for legacy endpoints
                 g.api_version = "v1"
+        return None
 
     @app.after_request
-    def add_version_header(response):
+    def add_version_header(response: Any) -> Any:
         """Add version header to response."""
         if hasattr(g, "api_version"):
             response.headers["X-API-Version"] = g.api_version
@@ -303,14 +306,14 @@ def configure_health_check_bypass(app: Flask) -> None:
     """
 
     @app.before_request
-    def bypass_middleware_for_health():
+    def bypass_middleware_for_health() -> None:
         """Bypass certain middleware for health check endpoints."""
         # Mark health check requests to bypass some middleware
         if request.endpoint in ["health_check", "get_system_health"]:
             g.is_health_check = True
 
 
-def configure_all_middleware(app: Flask, api_key: Optional[str] = None) -> Limiter:
+def configure_all_middleware(app: Flask, _api_key: str | None = None) -> Limiter:
     """
     Configure all middleware components for the Flask application.
 

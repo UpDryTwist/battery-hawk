@@ -16,6 +16,9 @@ from flask import Flask, request
 from flask_cors import CORS
 from flask_marshmallow import Marshmallow
 
+from battery_hawk.core import __version__ as core_version
+
+from .constants import DEFAULT_API_HOST, DEFAULT_API_PORT
 from .devices import setup_device_routes
 from .documentation import configure_swagger
 from .middleware import configure_all_middleware
@@ -29,22 +32,6 @@ if TYPE_CHECKING:
     from battery_hawk.core.engine import BatteryHawkCore
 
 
-class APIError(Exception):
-    """Custom exception for API-related errors."""
-
-    def __init__(self, message: str, status_code: int = 500) -> None:
-        """
-        Initialize APIError.
-
-        Args:
-            message: Error message
-            status_code: HTTP status code
-        """
-        super().__init__(message)
-        self.message = message
-        self.status_code = status_code
-
-
 class BatteryHawkAPI:
     """
     Flask REST API for Battery Hawk.
@@ -54,7 +41,9 @@ class BatteryHawkAPI:
     """
 
     def __init__(
-        self, config_manager: ConfigManager, core_engine: BatteryHawkCore
+        self,
+        config_manager: ConfigManager,
+        core_engine: BatteryHawkCore,
     ) -> None:
         """
         Initialize BatteryHawkAPI with configuration and core engine.
@@ -101,17 +90,19 @@ class BatteryHawkAPI:
                 "TESTING": False,
                 "JSON_SORT_KEYS": False,
                 "JSONIFY_PRETTYPRINT_REGULAR": True,
-            }
+            },
         )
 
     def _setup_error_handlers(self) -> None:
-        """Setup Flask error handlers for consistent error responses."""
+        """Set up Flask error handlers for consistent error responses."""
 
         @self.app.errorhandler(APIError)
         def handle_api_error(error: APIError) -> tuple[dict[str, Any], int]:
             """Handle custom API errors."""
             self.logger.error(
-                "API Error: %s (status: %d)", error.message, error.status_code
+                "API Error: %s (status: %d)",
+                error.message,
+                error.status_code,
             )
             return format_error_response(
                 error.message,
@@ -127,7 +118,9 @@ class BatteryHawkAPI:
         ) -> tuple[dict[str, Any], int]:
             """Handle validation errors."""
             self.logger.warning(
-                "Validation Error: %s (status: %d)", error.message, error.status_code
+                "Validation Error: %s (status: %d)",
+                error.message,
+                error.status_code,
             )
             return format_error_response(
                 error.message,
@@ -138,10 +131,12 @@ class BatteryHawkAPI:
             )
 
         @self.app.errorhandler(404)
-        def handle_not_found(error: Any) -> tuple[dict[str, Any], int]:
+        def handle_not_found(_error: Any) -> tuple[dict[str, Any], int]:
             """Handle 404 errors."""
             return format_error_response(
-                "The requested resource was not found", 404, "NOT_FOUND"
+                "The requested resource was not found",
+                404,
+                "NOT_FOUND",
             )
 
         @self.app.errorhandler(500)
@@ -149,7 +144,9 @@ class BatteryHawkAPI:
             """Handle internal server errors."""
             self.logger.exception("Internal server error: %s", error)
             return format_error_response(
-                "An internal server error occurred", 500, "INTERNAL_ERROR"
+                "An internal server error occurred",
+                500,
+                "INTERNAL_ERROR",
             )
 
     def _configure_middleware(self) -> None:
@@ -182,7 +179,7 @@ class BatteryHawkAPI:
 
     def setup_routes(self) -> None:
         """
-        Setup all API routes.
+        Set up all API routes.
 
         This method registers all API endpoints. Additional route modules
         will be integrated here as they are implemented.
@@ -200,11 +197,8 @@ class BatteryHawkAPI:
         @self.app.route("/api/version", methods=["GET"])
         def version_info() -> dict[str, Any]:
             """Version information endpoint."""
-            from battery_hawk.api import __version__ as api_version
-            from battery_hawk.core import __version__ as core_version
-
             return {
-                "api_version": api_version,
+                "api_version": "0.0.1-dev0",
                 "core_version": core_version,
                 "service": "battery-hawk-api",
             }
@@ -236,8 +230,8 @@ class BatteryHawkAPI:
 
         # Get API configuration
         api_config = self.config.get_config("system").get("api", {})
-        host = api_config.get("host", "0.0.0.0")  # nosec B104 - Configurable bind address
-        port = api_config.get("port", 5000)
+        host = api_config.get("host", DEFAULT_API_HOST)  # nosec B104 - Configurable bind address
+        port = api_config.get("port", DEFAULT_API_PORT)
         debug = api_config.get("debug", False)
 
         self.logger.info("Starting API server on %s:%d", host, port)

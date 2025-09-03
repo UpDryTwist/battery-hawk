@@ -1,0 +1,28 @@
+"""Constants for the Battery Hawk API module."""
+
+# HTTP Status Codes
+HTTP_BAD_REQUEST = 400
+HTTP_NOT_FOUND = 404
+
+# API Configuration
+MIN_API_PORT = 1024
+MAX_API_PORT = 65535
+DEFAULT_API_HOST = "0.0.0.0"  # nosec B104 - Configurable bind address
+DEFAULT_API_PORT = 5000
+
+# Bluetooth Configuration
+MIN_BLUETOOTH_CONNECTIONS = 1
+MAX_BLUETOOTH_CONNECTIONS = 10
+
+# Query Parameter Limits
+MAX_READINGS_LIMIT = 1000
+MIN_READINGS_LIMIT = 1
+
+# Path Component Indices
+API_PATH_COMPONENT_INDEX = 0
+VERSION_PATH_COMPONENT_INDEX = 1
+MIN_API_PATH_COMPONENTS = 2
+
+# Function Complexity Limits
+MAX_FUNCTION_STATEMENTS = 50
+MAX_FUNCTION_RETURNS = 6

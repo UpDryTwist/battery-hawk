@@ -175,7 +175,7 @@ http {
         ssl_certificate /etc/nginx/ssl/cert.pem;
         ssl_certificate_key /etc/nginx/ssl/key.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_ciphers HIGH:!annul:!MD5;
 
         location / {
             proxy_pass http://battery-hawk;

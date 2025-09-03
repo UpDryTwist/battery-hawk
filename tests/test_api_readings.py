@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -41,7 +42,7 @@ class MockDataStorage:
             },
         ]
 
-    async def get_recent_readings(self, device_id: str, limit: int = 100):
+    async def get_recent_readings(self, device_id: str, limit: int = 100) -> list[Any]:
         """Mock get recent readings."""
         return self.readings[:limit]
 
@@ -62,10 +63,10 @@ class MockDeviceRegistry:
                 "friendly_name": "Test Device",
                 "vehicle_id": "vehicle_1",
                 "status": "configured",
-            }
+            },
         }
 
-    def get_device(self, mac_address: str):
+    def get_device(self, mac_address: str) -> Any:
         """Get device by MAC address."""
         return self.devices.get(mac_address)
 
@@ -84,11 +85,14 @@ class MockStateManager:
 
         # Set up latest reading
         battery_info = BatteryInfo(
-            voltage=12.5, current=2.1, temperature=25.0, state_of_charge=85.0
+            voltage=12.5,
+            current=2.1,
+            temperature=25.0,
+            state_of_charge=85.0,
         )
         self.device_state.update_reading(battery_info)
 
-    def get_device_state(self, mac_address: str):
+    def get_device_state(self, mac_address: str) -> Any:
         """Get device state by MAC address."""
         if mac_address == "AA:BB:CC:DD:EE:FF":
             return self.device_state
@@ -129,13 +133,13 @@ class MockConfigManager(ConfigManager):
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Create a mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_core_engine():
+def mock_core_engine() -> MagicMock:
     """Create a mock core engine."""
     mock_engine = MagicMock(spec=BatteryHawkCore)
     mock_engine.running = True
@@ -146,13 +150,16 @@ def mock_core_engine():
 
 
 @pytest.fixture
-def api_instance(mock_config_manager, mock_core_engine):
+def api_instance(
+    mock_config_manager: MockConfigManager,
+    mock_core_engine: MagicMock,
+) -> BatteryHawkAPI:
     """Create a BatteryHawkAPI instance for testing."""
     return BatteryHawkAPI(mock_config_manager, mock_core_engine)
 
 
 @pytest.fixture
-def client(api_instance):
+def client(api_instance: BatteryHawkAPI) -> Any:
     """Create a test client."""
     return api_instance.app.test_client()
 
@@ -160,7 +167,7 @@ def client(api_instance):
 class TestReadingsEndpoints:
     """Test cases for readings API endpoints."""
 
-    def test_get_device_readings(self, client) -> None:
+    def test_get_device_readings(self, client: Any) -> None:
         """Test GET /api/readings/{mac} endpoint."""
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF")
         assert response.status_code == 200
@@ -178,7 +185,7 @@ class TestReadingsEndpoints:
         assert reading["attributes"]["voltage"] == 12.5
         assert reading["attributes"]["current"] == 2.1
 
-    def test_get_device_readings_with_pagination(self, client) -> None:
+    def test_get_device_readings_with_pagination(self, client: Any) -> None:
         """Test GET /api/readings/{mac} endpoint with pagination."""
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?limit=1&offset=0")
         assert response.status_code == 200
@@ -190,7 +197,7 @@ class TestReadingsEndpoints:
         # Should have next link since we have 2 readings total and limit is 1
         assert "next" in data["links"]
 
-    def test_get_device_readings_invalid_params(self, client) -> None:
+    def test_get_device_readings_invalid_params(self, client: Any) -> None:
         """Test GET /api/readings/{mac} endpoint with invalid parameters."""
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?limit=invalid")
         assert response.status_code == 400
@@ -198,7 +205,7 @@ class TestReadingsEndpoints:
         data = response.get_json()
         assert "errors" in data
 
-    def test_get_device_readings_not_found(self, client) -> None:
+    def test_get_device_readings_not_found(self, client: Any) -> None:
         """Test GET /api/readings/{mac} endpoint for non-existing device."""
         response = client.get("/api/readings/XX:XX:XX:XX:XX:XX")
         assert response.status_code == 404
@@ -207,7 +214,7 @@ class TestReadingsEndpoints:
         assert "errors" in data
         assert data["errors"][0]["status"] == "404"
 
-    def test_get_latest_reading(self, client) -> None:
+    def test_get_latest_reading(self, client: Any) -> None:
         """Test GET /api/readings/{mac}/latest endpoint."""
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF/latest")
         assert response.status_code == 200
@@ -220,24 +227,28 @@ class TestReadingsEndpoints:
         assert reading["attributes"]["device_id"] == "AA:BB:CC:DD:EE:FF"
         assert reading["attributes"]["voltage"] == 12.5
 
-    def test_get_latest_reading_not_found(self, client) -> None:
+    def test_get_latest_reading_not_found(self, client: Any) -> None:
         """Test GET /api/readings/{mac}/latest endpoint for non-existing device."""
         response = client.get("/api/readings/XX:XX:XX:XX:XX:XX/latest")
         assert response.status_code == 404
 
-    def test_get_latest_reading_no_data(self, client, mock_core_engine) -> None:
+    def test_get_latest_reading_no_data(
+        self,
+        client: Any,
+        mock_core_engine: MagicMock,
+    ) -> None:
         """Test GET /api/readings/{mac}/latest endpoint when no readings available."""
         # Mock state manager to return device state with no readings
         mock_state = MagicMock()
         mock_state.latest_reading = None
         mock_core_engine.state_manager.get_device_state = MagicMock(
-            return_value=mock_state
+            return_value=mock_state,
         )
 
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF/latest")
         assert response.status_code == 404
 
-    def test_readings_sorting(self, client) -> None:
+    def test_readings_sorting(self, client: Any) -> None:
         """Test readings sorting functionality."""
         # Test ascending timestamp sort
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?sort=timestamp")
@@ -248,7 +259,7 @@ class TestReadingsEndpoints:
         timestamps = [reading["attributes"]["timestamp"] for reading in data["data"]]
         assert timestamps == sorted(timestamps)
 
-    def test_readings_invalid_sort(self, client) -> None:
+    def test_readings_invalid_sort(self, client: Any) -> None:
         """Test readings with invalid sort parameter."""
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?sort=invalid")
         assert response.status_code == 400
@@ -257,7 +268,7 @@ class TestReadingsEndpoints:
         assert "errors" in data
         assert "Invalid sort parameter" in data["errors"][0]["detail"]
 
-    def test_readings_limit_validation(self, client) -> None:
+    def test_readings_limit_validation(self, client: Any) -> None:
         """Test readings limit parameter validation."""
         # Test limit too high
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?limit=2000")
@@ -267,7 +278,7 @@ class TestReadingsEndpoints:
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?limit=-1")
         assert response.status_code == 400
 
-    def test_readings_offset_validation(self, client) -> None:
+    def test_readings_offset_validation(self, client: Any) -> None:
         """Test readings offset parameter validation."""
         # Test negative offset
         response = client.get("/api/readings/AA:BB:CC:DD:EE:FF?offset=-1")

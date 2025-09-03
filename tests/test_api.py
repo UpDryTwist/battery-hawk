@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.battery_hawk.api import BatteryHawkAPI
+from src.battery_hawk.api.api import APIError
 from src.battery_hawk.config.config_manager import ConfigManager
 from src.battery_hawk.core.engine import BatteryHawkCore
 
@@ -46,13 +47,13 @@ class MockConfigManager(ConfigManager):
 
 
 @pytest.fixture
-def mock_config_manager():
+def mock_config_manager() -> MockConfigManager:
     """Create a mock configuration manager."""
     return MockConfigManager()
 
 
 @pytest.fixture
-def mock_core_engine():
+def mock_core_engine() -> MagicMock:
     """Create a mock core engine."""
     mock_engine = MagicMock(spec=BatteryHawkCore)
     mock_engine.running = True
@@ -60,7 +61,10 @@ def mock_core_engine():
 
 
 @pytest.fixture
-def api_instance(mock_config_manager, mock_core_engine):
+def api_instance(
+    mock_config_manager: MockConfigManager,
+    mock_core_engine: MagicMock,
+) -> BatteryHawkAPI:
     """Create a BatteryHawkAPI instance for testing."""
     return BatteryHawkAPI(mock_config_manager, mock_core_engine)
 
@@ -68,7 +72,7 @@ def api_instance(mock_config_manager, mock_core_engine):
 class TestBatteryHawkAPI:
     """Test cases for BatteryHawkAPI class."""
 
-    def test_api_initialization(self, api_instance) -> None:
+    def test_api_initialization(self, api_instance: BatteryHawkAPI) -> None:
         """Test that API initializes correctly."""
         assert api_instance.app is not None
         assert api_instance.config is not None
@@ -76,7 +80,7 @@ class TestBatteryHawkAPI:
         assert not api_instance.running
         assert api_instance.server_thread is None
 
-    def test_flask_app_configuration(self, api_instance) -> None:
+    def test_flask_app_configuration(self, api_instance: BatteryHawkAPI) -> None:
         """Test that Flask app is configured correctly."""
         app = api_instance.app
         assert not app.config["DEBUG"]  # Should be False in test config
@@ -84,7 +88,7 @@ class TestBatteryHawkAPI:
         assert not app.config["JSON_SORT_KEYS"]
         assert app.config["JSONIFY_PRETTYPRINT_REGULAR"]
 
-    def test_health_endpoint(self, api_instance) -> None:
+    def test_health_endpoint(self, api_instance: BatteryHawkAPI) -> None:
         """Test the health check endpoint."""
         with api_instance.app.test_client() as client:
             response = client.get("/api/health")
@@ -95,7 +99,7 @@ class TestBatteryHawkAPI:
             assert data["service"] == "battery-hawk-api"
             assert data["core_running"] is True
 
-    def test_version_endpoint(self, api_instance) -> None:
+    def test_version_endpoint(self, api_instance: BatteryHawkAPI) -> None:
         """Test the version information endpoint."""
         with api_instance.app.test_client() as client:
             response = client.get("/api/version")
@@ -106,7 +110,7 @@ class TestBatteryHawkAPI:
             assert "core_version" in data
             assert data["service"] == "battery-hawk-api"
 
-    def test_404_error_handler(self, api_instance) -> None:
+    def test_404_error_handler(self, api_instance: BatteryHawkAPI) -> None:
         """Test 404 error handling."""
         with api_instance.app.test_client() as client:
             response = client.get("/api/nonexistent")
@@ -120,9 +124,8 @@ class TestBatteryHawkAPI:
             assert error["status"] == "404"
             assert error["code"] == "NOT_FOUND"
 
-    def test_api_error_handling(self, api_instance) -> None:
+    def test_api_error_handling(self, api_instance: BatteryHawkAPI) -> None:
         """Test custom API error handling."""
-        from src.battery_hawk.api.api import APIError
 
         # Add a test route that raises APIError
         @api_instance.app.route("/api/test-error")
@@ -140,7 +143,7 @@ class TestBatteryHawkAPI:
             assert error["detail"] == "Test error message"
             assert error["status"] == "400"
 
-    def test_start_stop_methods(self, api_instance) -> None:
+    def test_start_stop_methods(self, api_instance: BatteryHawkAPI) -> None:
         """Test start and stop methods (without actually starting server)."""
         # Test that methods exist and can be called
         assert hasattr(api_instance, "start")
