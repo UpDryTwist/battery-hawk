@@ -12,7 +12,7 @@ from datetime import datetime
 
 from battery_hawk.config.config_manager import ConfigManager
 from battery_hawk.core.engine import BatteryHawkCore
-from battery_hawk.mqtt import MQTTInterface, MQTTPublisher, MQTTEventHandler
+from battery_hawk.mqtt import MQTTEventHandler, MQTTInterface, MQTTPublisher
 from battery_hawk_driver.base.protocol import BatteryInfo, DeviceStatus
 
 
@@ -24,10 +24,10 @@ async def main() -> None:
 
     # Initialize configuration manager
     config_manager = ConfigManager()
-    
+
     # Create core engine (normally this would be done in the main application)
     core_engine = BatteryHawkCore(config_manager)
-    
+
     # Create MQTT components
     mqtt_interface = MQTTInterface(config_manager)
     publisher = MQTTPublisher(mqtt_interface)
@@ -62,10 +62,10 @@ async def main() -> None:
         # 2. Simulate device reading update
         logger.info("Simulating device reading update...")
         from battery_hawk.core.state import DeviceState
-        
+
         device_state = DeviceState("AA:BB:CC:DD:EE:FF", "BM2")
         device_state.vehicle_id = "test_vehicle"
-        
+
         reading = BatteryInfo(
             voltage=12.6,
             current=2.5,
@@ -76,7 +76,7 @@ async def main() -> None:
             timestamp=datetime.now().timestamp(),
         )
         device_state.update_reading(reading)
-        
+
         await event_handler.on_device_reading("AA:BB:CC:DD:EE:FF", device_state, None)
         logger.info("Device reading event processed")
 
@@ -88,8 +88,12 @@ async def main() -> None:
             last_command="read_data",
         )
         device_state.update_status(status)
-        
-        await event_handler.on_device_status_change("AA:BB:CC:DD:EE:FF", device_state, None)
+
+        await event_handler.on_device_status_change(
+            "AA:BB:CC:DD:EE:FF",
+            device_state,
+            None,
+        )
         logger.info("Device status change event processed")
 
         # 4. Simulate vehicle association
@@ -135,7 +139,7 @@ async def main() -> None:
 
         # 6. Demonstrate periodic system status publishing
         logger.info("Setting up periodic system status publishing...")
-        
+
         async def periodic_system_status():
             """Periodically publish system status updates."""
             while True:
@@ -166,13 +170,13 @@ async def main() -> None:
                             "errors_last_hour": 0,
                         },
                     }
-                    
+
                     await event_handler.on_system_status_change(current_status)
                     logger.info("Periodic system status published")
-                    
+
                     # Wait 30 seconds before next update
                     await asyncio.sleep(30)
-                    
+
                 except Exception as e:
                     logger.error("Error in periodic status update: %s", e)
                     await asyncio.sleep(30)
@@ -183,12 +187,12 @@ async def main() -> None:
         # Let the system run for a while to demonstrate periodic updates
         logger.info("Running system for 2 minutes to demonstrate periodic updates...")
         logger.info("Press Ctrl+C to stop")
-        
+
         try:
             await asyncio.sleep(120)  # Run for 2 minutes
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
-        
+
         # Cancel the periodic task
         status_task.cancel()
         try:
@@ -205,7 +209,7 @@ async def main() -> None:
         # Unregister event handlers
         logger.info("Unregistering MQTT event handlers...")
         event_handler.unregister_all_handlers()
-        
+
         # Disconnect from MQTT broker
         logger.info("Disconnecting from MQTT broker...")
         await mqtt_interface.disconnect()

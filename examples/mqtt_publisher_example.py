@@ -23,7 +23,7 @@ async def main() -> None:
 
     # Initialize configuration manager
     config_manager = ConfigManager()
-    
+
     # Create MQTT interface and publisher
     mqtt_interface = MQTTInterface(config_manager)
     publisher = MQTTPublisher(mqtt_interface)
@@ -46,7 +46,7 @@ async def main() -> None:
             cycles=150,
             timestamp=datetime.now().timestamp(),
         )
-        
+
         await publisher.publish_device_reading(
             device_id=device_id,
             reading=reading,
@@ -62,7 +62,7 @@ async def main() -> None:
             protocol_version="1.0",
             last_command="read_data",
         )
-        
+
         await publisher.publish_device_status(
             device_id=device_id,
             status=status,
@@ -77,7 +77,7 @@ async def main() -> None:
             error_code=1001,
             error_message="Connection timeout after 30 seconds",
         )
-        
+
         await publisher.publish_device_status(
             device_id=device_id,
             status=error_status,
@@ -116,7 +116,7 @@ async def main() -> None:
                 },
             ],
         }
-        
+
         await publisher.publish_vehicle_summary("my_vehicle", vehicle_summary)
         logger.info("Vehicle summary published to: vehicles/my_vehicle/summary")
 
@@ -149,7 +149,7 @@ async def main() -> None:
                 "errors_last_hour": 2,
             },
         }
-        
+
         await publisher.publish_system_status(system_status)
         logger.info("System status published to: system/status")
 
