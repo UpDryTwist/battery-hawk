@@ -33,6 +33,9 @@ docker-compose up -d
 
 # Verify deployment
 curl http://localhost:5000/api/health
+
+# Or use CLI
+battery-hawk system health
 ```
 
 ### Production Configuration
@@ -259,7 +262,7 @@ User=battery-hawk
 Group=battery-hawk
 WorkingDirectory=/opt/battery-hawk
 Environment=PATH=/opt/battery-hawk/.venv/bin
-ExecStart=/opt/battery-hawk/.venv/bin/python -m battery_hawk
+ExecStart=/opt/battery-hawk/.venv/bin/battery-hawk service start --api --mqtt
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -285,8 +288,20 @@ sudo systemctl start battery-hawk
 # Check status
 sudo systemctl status battery-hawk
 
+# Check Battery Hawk status via CLI
+sudo -u battery-hawk /opt/battery-hawk/.venv/bin/battery-hawk service status
+
+# Check system health via CLI
+sudo -u battery-hawk /opt/battery-hawk/.venv/bin/battery-hawk system health
+
 # View logs
 sudo journalctl -u battery-hawk -f
+
+# Or view logs via CLI
+sudo -u battery-hawk /opt/battery-hawk/.venv/bin/battery-hawk system logs --follow
+
+# Stop service
+sudo systemctl stop battery-hawk
 ```
 
 ## ☸️ Kubernetes Deployment

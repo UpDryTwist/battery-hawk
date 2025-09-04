@@ -8,7 +8,7 @@ types of Battery Hawk data to MQTT topics.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from battery_hawk.config.config_manager import ConfigManager
 from battery_hawk.mqtt import MQTTInterface, MQTTPublisher
@@ -44,7 +44,7 @@ async def main() -> None:
             state_of_charge=85.0,
             capacity=100.0,
             cycles=150,
-            timestamp=datetime.now().timestamp(),
+            timestamp=datetime.now(timezone.utc).timestamp(),
         )
 
         await publisher.publish_device_reading(
@@ -95,7 +95,7 @@ async def main() -> None:
             "total_capacity": 300.0,
             "average_soc": 78.5,
             "overall_health": "good",
-            "last_updated": datetime.now().isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "devices": [
                 {
                     "id": "AA:BB:CC:DD:EE:FF",
@@ -157,8 +157,8 @@ async def main() -> None:
         await asyncio.sleep(1)
         logger.info("All messages published successfully!")
 
-    except Exception as e:
-        logger.error("Error during MQTT publishing: %s", e)
+    except Exception:
+        logger.exception("Error during MQTT publishing")
         raise
     finally:
         # Disconnect from MQTT broker

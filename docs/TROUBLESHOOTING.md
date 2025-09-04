@@ -7,6 +7,22 @@ This guide helps you diagnose and resolve common issues with Battery Hawk.
 ### System Health Check
 Start with a basic health check to identify issues:
 
+#### Using CLI (Recommended)
+```bash
+# Comprehensive health check
+battery-hawk system health
+
+# Run full diagnostics
+battery-hawk system diagnose --verbose
+
+# Check service status
+battery-hawk service status
+
+# Check system metrics
+battery-hawk system metrics
+```
+
+#### Using API
 ```bash
 # Check API health
 curl http://localhost:5000/api/health
@@ -21,6 +37,22 @@ curl http://localhost:5000/api/system/health
 ### Log Analysis
 Enable debug logging for detailed troubleshooting:
 
+#### Using CLI (Recommended)
+```bash
+# View recent logs
+battery-hawk system logs --lines 50
+
+# View error logs only
+battery-hawk system logs --level ERROR --lines 20
+
+# Follow logs in real-time
+battery-hawk system logs --follow
+
+# Set debug logging level
+battery-hawk config set system logging level DEBUG
+```
+
+#### Using API
 ```bash
 # Enable debug logging via API
 curl -X PATCH http://localhost:5000/api/system/config \
@@ -34,7 +66,10 @@ curl -X PATCH http://localhost:5000/api/system/config \
       }
     }
   }'
+```
 
+#### System Logs
+```bash
 # View logs (Docker)
 docker-compose logs -f battery-hawk
 

@@ -10,17 +10,23 @@ import ssl
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+
+from battery_hawk_driver.base.protocol import DeviceStatus
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from asyncio_mqtt import Client, MqttError
+
+from battery_hawk_driver.base.protocol import BatteryInfo
 
 if TYPE_CHECKING:
     from battery_hawk.config.config_manager import ConfigManager
     from battery_hawk.core.engine import BatteryHawkCore
     from battery_hawk.core.state import DeviceState
-    from battery_hawk_driver.base.protocol import BatteryInfo, DeviceStatus
 from .topics import MQTTTopics
 
 # Constants
@@ -29,6 +35,7 @@ MAX_PORT_NUMBER = 65535
 
 class ConnectionState(Enum):
     """MQTT connection states."""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -39,6 +46,7 @@ class ConnectionState(Enum):
 @dataclass
 class QueuedMessage:
     """Represents a queued MQTT message."""
+
     topic: str
     payload: dict[str, Any] | str
     retain: bool
@@ -49,6 +57,7 @@ class QueuedMessage:
 @dataclass
 class ReconnectionConfig:
     """Configuration for MQTT reconnection behavior."""
+
     max_retries: int = 10
     initial_retry_delay: float = 1.0
     max_retry_delay: float = 300.0  # 5 minutes
@@ -106,7 +115,9 @@ class MQTTInterface:
         self._shutdown_event = asyncio.Event()
 
         # Message queuing for resilience
-        self._message_queue: deque[QueuedMessage] = deque(maxlen=self._reconnection_config.message_queue_size)
+        self._message_queue: deque[QueuedMessage] = deque(
+            maxlen=self._reconnection_config.message_queue_size,
+        )
         self._queue_lock = asyncio.Lock()
 
         # Connection tracking
@@ -125,7 +136,7 @@ class MQTTInterface:
         }
 
         # Register for config changes
-        self.config_manager.add_listener(self._on_config_change)
+        self.config_manager.register_listener(self._on_config_change)
 
     def _get_mqtt_config(self) -> dict[str, Any]:
         """Get and validate MQTT configuration."""
@@ -138,15 +149,21 @@ class MQTTInterface:
             return mqtt_config
 
         required_fields = ["broker", "port", "topic_prefix"]
-        missing_fields = [field for field in required_fields if not mqtt_config.get(field)]
+        missing_fields = [
+            field for field in required_fields if not mqtt_config.get(field)
+        ]
 
         if missing_fields:
-            raise ValueError(f"Missing required MQTT configuration fields: {missing_fields}")
+            raise ValueError(
+                f"Missing required MQTT configuration fields: {missing_fields}",
+            )
 
         # Validate port range
         port = mqtt_config.get("port", 1883)
         if not isinstance(port, int) or port < 1 or port > MAX_PORT_NUMBER:
-            raise ValueError(f"Invalid MQTT port: {port}. Must be between 1 and {MAX_PORT_NUMBER}")
+            raise ValueError(
+                f"Invalid MQTT port: {port}. Must be between 1 and {MAX_PORT_NUMBER}",
+            )
 
         # Validate QoS level
         qos = mqtt_config.get("qos", 1)
@@ -188,7 +205,14 @@ class MQTTInterface:
                 self._reconnection_config = self._get_reconnection_config()
 
                 # Check if MQTT-relevant config changed
-                mqtt_fields = ["broker", "port", "username", "password", "tls", "topic_prefix"]
+                mqtt_fields = [
+                    "broker",
+                    "port",
+                    "username",
+                    "password",
+                    "tls",
+                    "topic_prefix",
+                ]
                 config_changed = any(
                     old_config.get(field) != self._mqtt_config.get(field)
                     for field in mqtt_fields
@@ -196,17 +220,26 @@ class MQTTInterface:
 
                 # Check if reconnection config changed
                 reconnection_changed = (
-                    old_reconnection_config.message_queue_size != self._reconnection_config.message_queue_size
+                    old_reconnection_config.message_queue_size
+                    != self._reconnection_config.message_queue_size
                 )
 
                 if reconnection_changed:
                     # Update message queue size if it changed
-                    new_queue = deque(self._message_queue, maxlen=self._reconnection_config.message_queue_size)
+                    new_queue = deque(
+                        self._message_queue,
+                        maxlen=self._reconnection_config.message_queue_size,
+                    )
                     self._message_queue = new_queue
 
-                if config_changed and self._connection_state == ConnectionState.CONNECTED:
+                if (
+                    config_changed
+                    and self._connection_state == ConnectionState.CONNECTED
+                ):
                     self.logger.info("MQTT configuration changed, reconnecting...")
-                    asyncio.create_task(self._initiate_reconnection())
+                    task = asyncio.create_task(self._initiate_reconnection())
+                    # Store task reference to prevent garbage collection
+                    task.add_done_callback(lambda _: None)
 
             except Exception:
                 self.logger.exception("Failed to update MQTT configuration")
@@ -233,17 +266,11 @@ class MQTTInterface:
 
         await self._connect_with_retry()
 
-    async def _connect_with_retry(self) -> None:
-        """Connect to MQTT broker with retry logic."""
-        self._connection_state = ConnectionState.CONNECTING
-        self._connection_start_time = time.time()
-
+    def _prepare_client_kwargs(self) -> dict[str, Any]:
+        """Prepare connection parameters for MQTT client."""
         broker = self._mqtt_config["broker"]
         port = self._mqtt_config["port"]
 
-        self.logger.info("Connecting to MQTT broker at %s:%d", broker, port)
-
-        # Prepare connection parameters
         client_kwargs = {
             "hostname": broker,
             "port": port,
@@ -275,7 +302,80 @@ class MQTTInterface:
 
             client_kwargs["tls_context"] = ssl_context
 
-        # Attempt connection with retries
+        return client_kwargs
+
+    async def _attempt_single_connection(self, client_kwargs: dict[str, Any]) -> bool:
+        """Attempt a single connection to MQTT broker."""
+        try:
+            # Create client with timeout
+            self._client = Client(**client_kwargs)
+
+            # Use asyncio.wait_for to enforce connection timeout
+            await asyncio.wait_for(
+                self._client.__aenter__(),
+                timeout=self._reconnection_config.connection_timeout,
+            )
+
+            # Connection successful
+            self._connection_state = ConnectionState.CONNECTED
+            self._consecutive_failures = 0
+            self._stats["total_connections"] += 1
+
+            broker = self._mqtt_config["broker"]
+            port = self._mqtt_config["port"]
+            self.logger.info(
+                "Successfully connected to MQTT broker at %s:%d",
+                broker,
+                port,
+            )
+
+            # Start background tasks
+            await self._start_background_tasks()
+
+            # Process any queued messages
+            task = asyncio.create_task(self._process_message_queue())
+            task.add_done_callback(lambda _: None)
+
+        except (MqttError, OSError, TimeoutError):
+            self._consecutive_failures += 1
+            raise
+        else:
+            return True
+
+    async def _handle_retry_delay(self, attempt: int, max_retries: int) -> bool:
+        """Handle retry delay with early exit on shutdown. Returns True if should continue."""
+        retry_delay = self._calculate_retry_delay(attempt)
+        self.logger.warning(
+            "MQTT connection attempt %d/%d failed. Retrying in %.1fs...",
+            attempt + 1,
+            max_retries + 1,
+            retry_delay,
+        )
+
+        # Wait with early exit on shutdown
+        try:
+            await asyncio.wait_for(
+                self._shutdown_event.wait(),
+                timeout=retry_delay,
+            )
+            # Shutdown requested during wait
+            self._connection_state = ConnectionState.DISCONNECTED
+        except TimeoutError:
+            # Normal retry delay completed
+            return True
+        else:
+            return False
+
+    async def _connect_with_retry(self) -> None:
+        """Connect to MQTT broker with retry logic."""
+        self._connection_state = ConnectionState.CONNECTING
+        self._connection_start_time = time.time()
+
+        broker = self._mqtt_config["broker"]
+        port = self._mqtt_config["port"]
+        self.logger.info("Connecting to MQTT broker at %s:%d", broker, port)
+
+        client_kwargs = self._prepare_client_kwargs()
         max_retries = self._reconnection_config.max_retries
         last_error = None
 
@@ -288,68 +388,19 @@ class MQTTInterface:
             self._last_connection_attempt = time.time()
 
             try:
-                # Create client with timeout
-                self._client = Client(**client_kwargs)
-
-                # Use asyncio.wait_for to enforce connection timeout
-                await asyncio.wait_for(
-                    self._client.__aenter__(),
-                    timeout=self._reconnection_config.connection_timeout
-                )
-
-                # Connection successful
-                self._connection_state = ConnectionState.CONNECTED
-                self._consecutive_failures = 0
-                self._stats["total_connections"] += 1
-
-                self.logger.info(
-                    "Successfully connected to MQTT broker at %s:%d (attempt %d/%d)",
-                    broker,
-                    port,
-                    attempt + 1,
-                    max_retries + 1,
-                )
-
-                # Start background tasks
-                await self._start_background_tasks()
-
-                # Process any queued messages
-                asyncio.create_task(self._process_message_queue())
-
-                return
-
-            except (MqttError, OSError, asyncio.TimeoutError) as e:
+                if await self._attempt_single_connection(client_kwargs):
+                    return  # Connection successful
+            except (MqttError, OSError, TimeoutError) as e:
                 last_error = e
-                self._consecutive_failures += 1
 
                 if attempt < max_retries:
-                    retry_delay = self._calculate_retry_delay(attempt)
-                    self.logger.warning(
-                        "MQTT connection attempt %d/%d failed: %s. Retrying in %.1fs...",
-                        attempt + 1,
-                        max_retries + 1,
-                        e,
-                        retry_delay,
-                    )
-
-                    # Wait with early exit on shutdown
-                    try:
-                        await asyncio.wait_for(
-                            self._shutdown_event.wait(),
-                            timeout=retry_delay
-                        )
-                        # Shutdown requested during wait
-                        self._connection_state = ConnectionState.DISCONNECTED
-                        return
-                    except asyncio.TimeoutError:
-                        # Normal retry delay completed
-                        pass
+                    if not await self._handle_retry_delay(attempt, max_retries):
+                        return  # Shutdown requested
                 else:
-                    self.logger.error(
-                        "MQTT connection attempt %d/%d failed: %s",
+                    self.logger.exception(
+                        "MQTT connection attempt %d/%d failed",
                         attempt + 1,
                         max_retries + 1,
-                        e,
                     )
 
         # If we get here, all attempts failed
@@ -366,7 +417,7 @@ class MQTTInterface:
         jitter_factor = self._reconnection_config.jitter_factor
 
         # Exponential backoff
-        delay = base_delay * (multiplier ** attempt)
+        delay = base_delay * (multiplier**attempt)
         delay = min(delay, max_delay)
 
         # Add jitter to avoid thundering herd
@@ -383,7 +434,9 @@ class MQTTInterface:
 
         # Start message processor task
         if not self._message_processor_task or self._message_processor_task.done():
-            self._message_processor_task = asyncio.create_task(self._message_processor_loop())
+            self._message_processor_task = asyncio.create_task(
+                self._message_processor_loop(),
+            )
 
     async def _health_check_loop(self) -> None:
         """Periodically check connection health."""
@@ -393,8 +446,10 @@ class MQTTInterface:
 
                 if self._connection_state == ConnectionState.CONNECTED:
                     # Check if client is still valid
-                    if not self._client or not hasattr(self._client, '_client'):
-                        self.logger.warning("MQTT client became invalid, initiating reconnection")
+                    if not self._client or not hasattr(self._client, "_client"):
+                        self.logger.warning(
+                            "MQTT client became invalid, initiating reconnection",
+                        )
                         await self._initiate_reconnection()
                         continue
 
@@ -403,8 +458,8 @@ class MQTTInterface:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.logger.error("Error in health check: %s", e)
+            except Exception:
+                self.logger.exception("Error in health check")
 
     async def _message_processor_loop(self) -> None:
         """Process queued messages when connection is available."""
@@ -419,10 +474,10 @@ class MQTTInterface:
                 # Check every 5 seconds
                 await asyncio.sleep(5.0)
 
-            except asyncio.CancelledError:
+            except asyncio.CancelledError:  # noqa: PERF203
                 break
-            except Exception as e:
-                self.logger.error("Error in message processor: %s", e)
+            except Exception:
+                self.logger.exception("Error in message processor")
 
     async def disconnect(self) -> None:
         """Disconnect from MQTT broker and cleanup resources."""
@@ -459,7 +514,7 @@ class MQTTInterface:
         if self._client:
             try:
                 await self._client.__aexit__(None, None, None)
-            except (MqttError, OSError, asyncio.TimeoutError) as e:
+            except (MqttError, OSError, TimeoutError) as e:
                 self.logger.warning("Error during MQTT disconnect: %s", e)
             finally:
                 self._client = None
@@ -503,7 +558,7 @@ class MQTTInterface:
                 if self._client:
                     try:
                         await self._client.__aexit__(None, None, None)
-                    except Exception as e:
+                    except (MqttError, OSError) as e:
                         self.logger.debug("Error during reconnection disconnect: %s", e)
                     finally:
                         self._client = None
@@ -513,9 +568,8 @@ class MQTTInterface:
 
                 # If we get here, reconnection was successful
                 self.logger.info("MQTT reconnection successful")
-                return
 
-            except MQTTConnectionError as e:
+            except MQTTConnectionError as e:  # noqa: PERF203
                 attempt += 1
                 if attempt < max_retries:
                     retry_delay = self._calculate_retry_delay(attempt)
@@ -531,28 +585,32 @@ class MQTTInterface:
                     try:
                         await asyncio.wait_for(
                             self._shutdown_event.wait(),
-                            timeout=retry_delay
+                            timeout=retry_delay,
                         )
                         # Shutdown requested during wait
-                        return
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         # Normal retry delay completed
                         continue
+                    else:
+                        # Shutdown requested during wait
+                        return
                 else:
-                    self.logger.error(
-                        "Reconnection failed after %d attempts: %s",
+                    self.logger.exception(
+                        "Reconnection failed after %d attempts",
                         max_retries,
-                        e,
                     )
                     self._connection_state = ConnectionState.FAILED
                     return
 
-            except Exception as e:
-                self.logger.error("Unexpected error during reconnection: %s", e)
+            except Exception:
+                self.logger.exception("Unexpected error during reconnection")
                 attempt += 1
                 if attempt >= max_retries:
                     self._connection_state = ConnectionState.FAILED
                     return
+            else:
+                # Reconnection successful
+                return
 
         if self._shutdown_event.is_set():
             self.logger.info("Reconnection cancelled due to shutdown")
@@ -618,10 +676,12 @@ class MQTTInterface:
             try:
                 await self._publish_message(queued_msg)
                 self._stats["messages_published"] += 1
-                return
             except MQTTConnectionError as e:
                 self.logger.warning("Immediate publish failed: %s", e)
                 # Fall through to queuing
+            else:
+                # Message published successfully
+                return
 
         # Queue message for later delivery
         await self._queue_message(queued_msg)
@@ -655,8 +715,11 @@ class MQTTInterface:
             self.logger.warning("Failed to publish to topic '%s': %s", full_topic, e)
             # Check if this is a connection error
             if self._is_connection_error(e):
-                self.logger.warning("Connection error detected, initiating reconnection...")
-                asyncio.create_task(self._initiate_reconnection())
+                self.logger.warning(
+                    "Connection error detected, initiating reconnection...",
+                )
+                task = asyncio.create_task(self._initiate_reconnection())
+                task.add_done_callback(lambda _: None)
             raise MQTTConnectionError(f"Failed to publish message: {e}") from e
 
     async def _queue_message(self, msg: QueuedMessage) -> None:
@@ -690,7 +753,10 @@ class MQTTInterface:
 
         async with self._queue_lock:
             # Process messages in order
-            while self._message_queue and self._connection_state == ConnectionState.CONNECTED:
+            while (
+                self._message_queue
+                and self._connection_state == ConnectionState.CONNECTED
+            ):
                 msg = self._message_queue.popleft()
 
                 try:
@@ -710,7 +776,7 @@ class MQTTInterface:
                             self._reconnection_config.message_retry_limit,
                         )
                     else:
-                        self.logger.error(
+                        self.logger.exception(
                             "Dropping message to topic '%s' after %d retries",
                             msg.topic,
                             msg.retry_count,
@@ -718,12 +784,11 @@ class MQTTInterface:
                         self._stats["messages_failed"] += 1
                     break
 
-                except ValueError as e:
+                except ValueError:
                     # Serialization error - drop message
-                    self.logger.error(
-                        "Dropping message to topic '%s' due to serialization error: %s",
+                    self.logger.exception(
+                        "Dropping message to topic '%s' due to serialization error",
                         msg.topic,
-                        e,
                     )
                     failed_count += 1
                     self._stats["messages_failed"] += 1
@@ -797,24 +862,36 @@ class MQTTInterface:
             return
 
         try:
-            async for message in self._client.messages:
-                topic = message.topic.value
-                payload = message.payload.decode("utf-8")
+            async with self._client.messages() as messages:
+                async for message in messages:
+                    topic = message.topic.value
+                    payload = (
+                        message.payload.decode("utf-8")
+                        if isinstance(message.payload, bytes)
+                        else str(message.payload)
+                    )
 
-                self.logger.debug("Received message on topic '%s': %s", topic, payload)
+                    self.logger.debug(
+                        "Received message on topic '%s': %s",
+                        topic,
+                        payload,
+                    )
 
-                # Find and call handler
-                handler = self._message_handlers.get(topic)
-                if handler:
-                    try:
-                        handler(topic, payload)
-                    except Exception:
-                        self.logger.exception(
-                            "Error in message handler for topic '%s'",
+                    # Find and call handler
+                    handler = self._message_handlers.get(topic)
+                    if handler:
+                        try:
+                            handler(topic, payload)
+                        except Exception:
+                            self.logger.exception(
+                                "Error in message handler for topic '%s'",
+                                topic,
+                            )
+                    else:
+                        self.logger.warning(
+                            "No handler registered for topic '%s'",
                             topic,
                         )
-                else:
-                    self.logger.warning("No handler registered for topic '%s'", topic)
 
         except asyncio.CancelledError:
             self.logger.debug("Message handling task cancelled")
@@ -822,12 +899,18 @@ class MQTTInterface:
             self.logger.exception("Error in message handling")
             # Try to reconnect on connection errors
             if self._is_connection_error(e):
-                self.logger.warning("Connection error in message handling, initiating reconnection...")
-                asyncio.create_task(self._initiate_reconnection())
+                self.logger.warning(
+                    "Connection error in message handling, initiating reconnection...",
+                )
+                task = asyncio.create_task(self._initiate_reconnection())
+                task.add_done_callback(lambda _: None)
 
     def _is_connection_error(self, error: Exception) -> bool:
         """Check if error is a connection-related error."""
-        return isinstance(error, (MqttError, OSError, ConnectionError, asyncio.TimeoutError))
+        return isinstance(
+            error,
+            (MqttError, OSError, ConnectionError, asyncio.TimeoutError),
+        )
 
 
 class MQTTPublisher:
@@ -875,7 +958,7 @@ class MQTTPublisher:
         # Build payload with reading data
         payload = {
             "device_id": device_id,
-            "timestamp": reading.timestamp or datetime.now().isoformat(),
+            "timestamp": reading.timestamp or datetime.now(timezone.utc).isoformat(),
             "voltage": reading.voltage,
             "current": reading.current,
             "temperature": reading.temperature,
@@ -907,11 +990,10 @@ class MQTTPublisher:
                 device_id,
                 vehicle_id or "none",
             )
-        except Exception as e:
-            self.logger.error(
-                "Failed to publish device reading for %s: %s",
+        except Exception:
+            self.logger.exception(
+                "Failed to publish device reading for %s",
                 device_id,
-                e,
             )
             raise
 
@@ -939,7 +1021,7 @@ class MQTTPublisher:
         # Build payload with status data
         payload = {
             "device_id": device_id,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "connected": status.connected,
         }
 
@@ -966,11 +1048,10 @@ class MQTTPublisher:
                 device_id,
                 status.connected,
             )
-        except Exception as e:
-            self.logger.error(
-                "Failed to publish device status for %s: %s",
+        except Exception:
+            self.logger.exception(
+                "Failed to publish device status for %s",
                 device_id,
-                e,
             )
             raise
 
@@ -996,7 +1077,7 @@ class MQTTPublisher:
         # Build payload with vehicle summary
         payload = {
             "vehicle_id": vehicle_id,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **summary_data,
         }
 
@@ -1008,11 +1089,10 @@ class MQTTPublisher:
                 "Published vehicle summary for %s",
                 vehicle_id,
             )
-        except Exception as e:
-            self.logger.error(
-                "Failed to publish vehicle summary for %s: %s",
+        except Exception:
+            self.logger.exception(
+                "Failed to publish vehicle summary for %s",
                 vehicle_id,
-                e,
             )
             raise
 
@@ -1035,28 +1115,18 @@ class MQTTPublisher:
 
         # Build payload with system status
         payload = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **status_data,
         }
 
         try:
-            # Use QoS 2 for system status (critical)
-            # Retain system status so new subscribers get last known state
-            # Override QoS for this critical message type
-            original_qos = self.mqtt_interface._mqtt_config.get("qos", 1)
-            self.mqtt_interface._mqtt_config["qos"] = 2
+            # Use retain for new subscribers to get last known system status
+            await self.mqtt_interface.publish(topic, payload, retain=True)
+            self.logger.debug("Published system status")
 
-            try:
-                await self.mqtt_interface.publish(topic, payload, retain=True)
-                self.logger.debug("Published system status")
-            finally:
-                # Restore original QoS
-                self.mqtt_interface._mqtt_config["qos"] = original_qos
-
-        except Exception as e:
-            self.logger.error(
-                "Failed to publish system status: %s",
-                e,
+        except Exception:
+            self.logger.exception(
+                "Failed to publish system status",
             )
             raise
 
@@ -1119,7 +1189,8 @@ class MQTTEventHandler:
             if event_type.startswith("state_"):
                 actual_event_type = event_type[6:]  # Remove 'state_' prefix
                 self.core_engine.state_manager.unsubscribe_from_changes(
-                    actual_event_type, handler
+                    actual_event_type,
+                    handler,
                 )
 
         self._registered_handlers.clear()
@@ -1128,14 +1199,26 @@ class MQTTEventHandler:
     def _register_core_engine_handlers(self) -> None:
         """Register event handlers with the core engine."""
         # Device discovered handler
-        device_discovered_handler = self._create_async_handler(self.on_device_discovered)
-        self.core_engine.add_event_handler("device_discovered", device_discovered_handler)
+        device_discovered_handler = self._create_async_handler(
+            self.on_device_discovered,
+        )
+        self.core_engine.add_event_handler(
+            "device_discovered",
+            device_discovered_handler,
+        )
         self._registered_handlers["core_device_discovered"] = device_discovered_handler
 
         # Vehicle associated handler
-        vehicle_associated_handler = self._create_async_handler(self.on_vehicle_associated)
-        self.core_engine.add_event_handler("vehicle_associated", vehicle_associated_handler)
-        self._registered_handlers["core_vehicle_associated"] = vehicle_associated_handler
+        vehicle_associated_handler = self._create_async_handler(
+            self.on_vehicle_associated,
+        )
+        self.core_engine.add_event_handler(
+            "vehicle_associated",
+            vehicle_associated_handler,
+        )
+        self._registered_handlers["core_vehicle_associated"] = (
+            vehicle_associated_handler
+        )
 
         # System shutdown handler
         system_shutdown_handler = self._create_async_handler(self.on_system_shutdown)
@@ -1155,8 +1238,13 @@ class MQTTEventHandler:
         self._registered_handlers["state_status"] = status_handler
 
         # Connection state handler
-        connection_handler = self._create_state_handler(self.on_device_connection_change)
-        self.core_engine.state_manager.subscribe_to_changes("connection", connection_handler)
+        connection_handler = self._create_state_handler(
+            self.on_device_connection_change,
+        )
+        self.core_engine.state_manager.subscribe_to_changes(
+            "connection",
+            connection_handler,
+        )
         self._registered_handlers["state_connection"] = connection_handler
 
         # Vehicle association handler
@@ -1166,19 +1254,21 @@ class MQTTEventHandler:
 
     def _create_async_handler(self, handler_method: Callable) -> Callable:
         """Create an async wrapper for core engine event handlers."""
+
         async def async_wrapper(event_data: dict[str, Any]) -> None:
             try:
                 await handler_method(event_data)
-            except Exception as e:
-                self.logger.error(
-                    "Error in async event handler %s: %s",
+            except Exception:
+                self.logger.exception(
+                    "Error in async event handler %s",
                     handler_method.__name__,
-                    e,
                 )
+
         return async_wrapper
 
     def _create_state_handler(self, handler_method: Callable) -> Callable:
         """Create a wrapper for state manager event handlers."""
+
         def state_wrapper(
             mac_address: str,
             new_state: DeviceState | None,
@@ -1186,15 +1276,16 @@ class MQTTEventHandler:
         ) -> None:
             try:
                 # Convert to async task
-                asyncio.create_task(
-                    handler_method(mac_address, new_state, old_state)
+                task = asyncio.create_task(
+                    handler_method(mac_address, new_state, old_state),
                 )
-            except Exception as e:
-                self.logger.error(
-                    "Error in state event handler %s: %s",
+                task.add_done_callback(lambda _: None)
+            except Exception:
+                self.logger.exception(
+                    "Error in state event handler %s",
                     handler_method.__name__,
-                    e,
                 )
+
         return state_wrapper
 
     async def on_device_discovered(self, event_data: dict[str, Any]) -> None:
@@ -1216,14 +1307,16 @@ class MQTTEventHandler:
                 "device_type": device_type,
                 "name": name,
                 "rssi": rssi,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "advertisement_data": event_data.get("advertisement_data", {}),
             }
 
             # Publish device discovery
             topic = "discovery/found"
             await self.mqtt_publisher.mqtt_interface.publish(
-                topic, discovery_payload, retain=False
+                topic,
+                discovery_payload,
+                retain=False,
             )
 
             self.logger.debug(
@@ -1232,16 +1325,14 @@ class MQTTEventHandler:
                 device_type,
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle device discovered event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle device discovered event")
 
     async def on_device_reading(
         self,
         mac_address: str,
         new_state: DeviceState | None,
-        old_state: DeviceState | None,
+        old_state: DeviceState | None,  # noqa: ARG002
     ) -> None:
         """
         Handle device reading updates.
@@ -1257,7 +1348,11 @@ class MQTTEventHandler:
 
             # Get device information
             device_info = self.core_engine.device_registry.get_device(mac_address)
-            vehicle_id = new_state.vehicle_id or device_info.get("vehicle_id") if device_info else None
+            vehicle_id = (
+                new_state.vehicle_id or device_info.get("vehicle_id")
+                if device_info
+                else None
+            )
             device_type = new_state.device_type
 
             # Publish device reading
@@ -1278,16 +1373,14 @@ class MQTTEventHandler:
                 vehicle_id or "none",
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle device reading event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle device reading event")
 
     async def on_device_status_change(
         self,
         mac_address: str,
         new_state: DeviceState | None,
-        old_state: DeviceState | None,
+        old_state: DeviceState | None,  # noqa: ARG002
     ) -> None:
         """
         Handle device status changes.
@@ -1320,10 +1413,8 @@ class MQTTEventHandler:
                 new_state.device_status.connected,
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle device status change event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle device status change event")
 
     async def on_device_connection_change(
         self,
@@ -1348,7 +1439,6 @@ class MQTTEventHandler:
                 return
 
             # Create a DeviceStatus object for connection state
-            from battery_hawk_driver.base.protocol import DeviceStatus
 
             connection_status = DeviceStatus(
                 connected=new_state.connected,
@@ -1372,10 +1462,8 @@ class MQTTEventHandler:
                 new_state.connected,
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle device connection change event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle device connection change event")
 
     async def on_vehicle_associated(self, event_data: dict[str, Any]) -> None:
         """
@@ -1399,12 +1487,14 @@ class MQTTEventHandler:
                 "vehicle_id": vehicle_id,
                 "device_type": device_type,
                 "new_vehicle": is_new_vehicle,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             }
 
             topic = f"vehicle/{vehicle_id}/device_associated"  # Custom topic for association events
             await self.mqtt_publisher.mqtt_interface.publish(
-                topic, association_payload, retain=False
+                topic,
+                association_payload,
+                retain=False,
             )
 
             # Update vehicle summary
@@ -1416,10 +1506,8 @@ class MQTTEventHandler:
                 vehicle_id,
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle vehicle association event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle vehicle association event")
 
     async def on_vehicle_update(
         self,
@@ -1458,10 +1546,8 @@ class MQTTEventHandler:
                 new_vehicle or "none",
             )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle vehicle update event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle vehicle update event")
 
     async def on_system_shutdown(self, event_data: dict[str, Any]) -> None:
         """
@@ -1474,20 +1560,20 @@ class MQTTEventHandler:
             # Publish system shutdown notification
             shutdown_payload = {
                 "status": "shutting_down",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
                 "reason": event_data.get("reason", "normal_shutdown"),
             }
 
             await self.mqtt_publisher.mqtt_interface.publish(
-                "system/shutdown", shutdown_payload, retain=True
+                "system/shutdown",
+                shutdown_payload,
+                retain=True,
             )
 
             self.logger.info("Published system shutdown notification")
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle system shutdown event: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle system shutdown event")
 
     async def on_system_status_change(self, status_data: dict[str, Any]) -> None:
         """
@@ -1501,10 +1587,112 @@ class MQTTEventHandler:
 
             self.logger.debug("Published system status update")
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to handle system status change: %s", e
-            )
+        except Exception:
+            self.logger.exception("Failed to handle system status change")
+
+    def _collect_vehicle_device_data(
+        self,
+        vehicle_id: str,
+    ) -> tuple[list[dict[str, Any]], int, float, float]:
+        """Collect device data for a vehicle."""
+        vehicle_devices = []
+        connected_count = 0
+        total_voltage = 0.0
+        total_capacity = 0.0
+        voltage_count = 0
+        capacity_count = 0
+
+        # Get device states for this vehicle
+        all_states = self.core_engine.state_manager.get_all_devices()
+        for state in all_states:
+            if state.vehicle_id == vehicle_id:
+                device_summary = {
+                    "id": state.mac_address,
+                    "device_type": state.device_type,
+                    "connected": state.connected,
+                    "last_reading_time": state.last_reading_time.isoformat()
+                    if state.last_reading_time
+                    else None,
+                }
+
+                # Add reading data if available
+                if state.latest_reading:
+                    device_summary.update(
+                        {
+                            "voltage": state.latest_reading.voltage,
+                            "current": state.latest_reading.current,
+                            "temperature": state.latest_reading.temperature,
+                            "state_of_charge": state.latest_reading.state_of_charge,
+                        },
+                    )
+
+                    # Accumulate for averages
+                    if state.latest_reading.voltage is not None:
+                        total_voltage += state.latest_reading.voltage
+                        voltage_count += 1
+                    if state.latest_reading.capacity is not None:
+                        total_capacity += state.latest_reading.capacity
+                        capacity_count += 1
+
+                if state.connected:
+                    connected_count += 1
+
+                vehicle_devices.append(device_summary)
+
+        average_voltage = total_voltage / voltage_count if voltage_count > 0 else 0.0
+        return vehicle_devices, connected_count, average_voltage, total_capacity
+
+    def _calculate_vehicle_health(
+        self,
+        connected_count: int,
+        total_devices: int,
+    ) -> tuple[str, float]:
+        """Calculate vehicle health status."""
+        excellent_threshold = 0.8
+        good_threshold = 0.6
+        fair_threshold = 0.4
+
+        health_score = connected_count / total_devices if total_devices > 0 else 0.0
+        if health_score >= excellent_threshold:
+            overall_health = "excellent"
+        elif health_score >= good_threshold:
+            overall_health = "good"
+        elif health_score >= fair_threshold:
+            overall_health = "fair"
+        else:
+            overall_health = "poor"
+
+        return overall_health, health_score
+
+    def _remove_time_fields(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Remove time-based fields that change on every update."""
+        clean_data = data.copy()
+        clean_data.pop("last_updated", None)
+
+        # Also clean device-level time fields
+        if "devices" in clean_data:
+            clean_devices = []
+            for device in clean_data["devices"]:
+                clean_device = device.copy()
+                clean_device.pop("last_reading_time", None)
+                clean_devices.append(clean_device)
+            clean_data["devices"] = clean_devices
+
+        return clean_data
+
+    def _should_update_vehicle_cache(
+        self,
+        vehicle_id: str,
+        summary_data: dict[str, Any],
+    ) -> bool:
+        """Check if vehicle summary cache should be updated."""
+        cache_data = self._remove_time_fields(summary_data)
+        cache_key = vehicle_id
+        cached_data = self._remove_time_fields(
+            self._vehicle_summary_cache.get(cache_key, {}),
+        )
+
+        return cache_key not in self._vehicle_summary_cache or cached_data != cache_data
 
     async def _update_vehicle_summary(self, vehicle_id: str) -> None:
         """
@@ -1520,63 +1708,17 @@ class MQTTEventHandler:
                 self.logger.warning("Vehicle %s not found in registry", vehicle_id)
                 return
 
-            # Get all devices associated with this vehicle
-            vehicle_devices = []
-            connected_count = 0
-            total_voltage = 0.0
-            total_capacity = 0.0
-            voltage_count = 0
-            capacity_count = 0
+            # Collect device data
+            vehicle_devices, connected_count, average_voltage, total_capacity = (
+                self._collect_vehicle_device_data(vehicle_id)
+            )
 
-            # Get device states for this vehicle
-            all_states = self.core_engine.state_manager.get_all_device_states()
-            for state in all_states.values():
-                if state.vehicle_id == vehicle_id:
-                    device_summary = {
-                        "id": state.mac_address,
-                        "device_type": state.device_type,
-                        "connected": state.connected,
-                        "last_reading_time": state.last_reading_time.isoformat()
-                        if state.last_reading_time
-                        else None,
-                    }
-
-                    # Add reading data if available
-                    if state.latest_reading:
-                        device_summary.update({
-                            "voltage": state.latest_reading.voltage,
-                            "current": state.latest_reading.current,
-                            "temperature": state.latest_reading.temperature,
-                            "state_of_charge": state.latest_reading.state_of_charge,
-                        })
-
-                        # Accumulate for averages
-                        if state.latest_reading.voltage is not None:
-                            total_voltage += state.latest_reading.voltage
-                            voltage_count += 1
-                        if state.latest_reading.capacity is not None:
-                            total_capacity += state.latest_reading.capacity
-                            capacity_count += 1
-
-                    if state.connected:
-                        connected_count += 1
-
-                    vehicle_devices.append(device_summary)
-
-            # Calculate summary statistics
+            # Calculate health
             total_devices = len(vehicle_devices)
-            average_voltage = total_voltage / voltage_count if voltage_count > 0 else 0.0
-
-            # Determine overall health
-            health_score = connected_count / total_devices if total_devices > 0 else 0.0
-            if health_score >= 0.8:
-                overall_health = "excellent"
-            elif health_score >= 0.6:
-                overall_health = "good"
-            elif health_score >= 0.4:
-                overall_health = "fair"
-            else:
-                overall_health = "poor"
+            overall_health, health_score = self._calculate_vehicle_health(
+                connected_count,
+                total_devices,
+            )
 
             # Build vehicle summary
             summary_data = {
@@ -1589,36 +1731,18 @@ class MQTTEventHandler:
                 "overall_health": overall_health,
                 "health_score": round(health_score, 2),
                 "devices": vehicle_devices,
-                "last_updated": datetime.now().isoformat(),
+                "last_updated": datetime.now(tz=timezone.utc).isoformat(),
             }
 
-            # Cache the summary to avoid redundant updates
-            # Create a cache-friendly version without time-based fields for comparison
-            def remove_time_fields(data: dict[str, Any]) -> dict[str, Any]:
-                """Remove time-based fields that change on every update."""
-                clean_data = data.copy()
-                clean_data.pop("last_updated", None)
-
-                # Also clean device-level time fields
-                if "devices" in clean_data:
-                    clean_devices = []
-                    for device in clean_data["devices"]:
-                        clean_device = device.copy()
-                        clean_device.pop("last_reading_time", None)
-                        clean_devices.append(clean_device)
-                    clean_data["devices"] = clean_devices
-
-                return clean_data
-
-            cache_data = remove_time_fields(summary_data)
-            cache_key = vehicle_id
-            cached_data = remove_time_fields(self._vehicle_summary_cache.get(cache_key, {}))
-
-            if cache_key not in self._vehicle_summary_cache or cached_data != cache_data:
-                self._vehicle_summary_cache[cache_key] = summary_data.copy()
+            # Check if cache should be updated
+            if self._should_update_vehicle_cache(vehicle_id, summary_data):
+                self._vehicle_summary_cache[vehicle_id] = summary_data.copy()
 
                 # Publish vehicle summary
-                await self.mqtt_publisher.publish_vehicle_summary(vehicle_id, summary_data)
+                await self.mqtt_publisher.publish_vehicle_summary(
+                    vehicle_id,
+                    summary_data,
+                )
 
                 self.logger.debug(
                     "Updated vehicle summary for %s (%d devices, %d connected)",
@@ -1627,9 +1751,8 @@ class MQTTEventHandler:
                     connected_count,
                 )
 
-        except Exception as e:
-            self.logger.error(
-                "Failed to update vehicle summary for %s: %s",
+        except Exception:
+            self.logger.exception(
+                "Failed to update vehicle summary for %s",
                 vehicle_id,
-                e,
             )

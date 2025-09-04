@@ -22,6 +22,10 @@ from influxdb_client.client.write_api import ASYNCHRONOUS
 from influxdb_client.domain.write_precision import WritePrecision
 
 from .storage_backends import BaseStorageBackend
+from .storage_backends_examples import (
+    JSONFileStorageBackend,
+    NullStorageBackend,
+)
 
 if TYPE_CHECKING:
     from battery_hawk.config.config_manager import ConfigManager
@@ -1400,11 +1404,6 @@ class StorageBackendFactory:
     def _register_example_backends(cls) -> None:
         """Register example backends if available."""
         try:
-            from .storage_backends_examples import (  # noqa: PLC0415
-                JSONFileStorageBackend,
-                NullStorageBackend,
-            )
-
             cls._backends["json"] = JSONFileStorageBackend
             cls._backends["null"] = NullStorageBackend
         except ImportError:

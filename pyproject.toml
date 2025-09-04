@@ -11,6 +11,9 @@ keywords = ["battery_hawk"]
 homepage = "https://github.com/UpDryTwist/battery-hawk"
 packages = [ { include = "battery_hawk", from = "src" } ]
 
+[tool.poetry.scripts]
+battery-hawk = "battery_hawk.cli:main"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -61,9 +64,16 @@ profile = "black"
 venv = ".venv"
 venvPath = "."
 pythonVersion = "3.12"
+extraPaths = ["src", "tests"]
 # TODO: fix for earlier Python versions
 # Include this if you're feeling you have too much time on your hands
 # typeCheckingMode = "strict"
+
+# Ignore mock-related attribute access issues in test files
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["../src", "."]
+reportAttributeAccessIssue = "none"
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"

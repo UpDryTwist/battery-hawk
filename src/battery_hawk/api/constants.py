@@ -7,7 +7,7 @@ HTTP_NOT_FOUND = 404
 # API Configuration
 MIN_API_PORT = 1024
 MAX_API_PORT = 65535
-DEFAULT_API_HOST = "0.0.0.0"  # nosec B104 - Configurable bind address
+DEFAULT_API_HOST = "0.0.0.0"  # nosec B104 # noqa: S104 - Configurable bind address
 DEFAULT_API_PORT = 5000
 
 # Bluetooth Configuration

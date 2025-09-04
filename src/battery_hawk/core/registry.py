@@ -131,6 +131,15 @@ class DeviceRegistry:
         """
         return self.devices.get(mac_address)
 
+    def get_all_devices(self) -> list[dict[str, Any]]:
+        """
+        Get all devices (both discovered and configured).
+
+        Returns:
+            List of all device dictionaries
+        """
+        return list(self.devices.values())
+
     def get_configured_devices(self) -> list[dict[str, Any]]:
         """
         Get all configured devices.

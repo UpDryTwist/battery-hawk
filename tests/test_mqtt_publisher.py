@@ -1,11 +1,12 @@
 """Tests for MQTT publisher functionality."""
 
-import json
-import pytest
 from datetime import datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-from battery_hawk.mqtt import MQTTInterface, MQTTPublisher, MQTTConnectionError
+import pytest
+
+from battery_hawk.mqtt import MQTTConnectionError, MQTTInterface, MQTTPublisher
 from battery_hawk_driver.base.protocol import BatteryInfo, DeviceStatus
 
 
@@ -13,7 +14,7 @@ class TestMQTTPublisher:
     """Test MQTT publisher functionality."""
 
     @pytest.fixture
-    def mock_mqtt_interface(self) -> MQTTInterface:
+    def mock_mqtt_interface(self) -> Any:
         """Create a mock MQTT interface."""
         mock_interface = MagicMock(spec=MQTTInterface)
         mock_interface.publish = AsyncMock()
@@ -21,7 +22,7 @@ class TestMQTTPublisher:
         return mock_interface
 
     @pytest.fixture
-    def publisher(self, mock_mqtt_interface: MQTTInterface) -> MQTTPublisher:
+    def publisher(self, mock_mqtt_interface: Any) -> MQTTPublisher:
         """Create MQTT publisher with mock interface."""
         return MQTTPublisher(mock_mqtt_interface)
 
@@ -60,16 +61,16 @@ class TestMQTTPublisher:
     ) -> None:
         """Test basic device reading publication."""
         device_id = "AA:BB:CC:DD:EE:FF"
-        
+
         await publisher.publish_device_reading(device_id, sample_battery_info)
-        
+
         # Verify publish was called with correct parameters
         mock_mqtt_interface.publish.assert_called_once()
         args, kwargs = mock_mqtt_interface.publish.call_args
-        
+
         assert args[0] == f"device/{device_id}/reading"
         assert kwargs["retain"] is False
-        
+
         # Verify payload structure
         payload = args[1]
         assert payload["device_id"] == device_id
@@ -94,14 +95,14 @@ class TestMQTTPublisher:
         device_id = "AA:BB:CC:DD:EE:FF"
         vehicle_id = "vehicle_123"
         device_type = "BM2"
-        
+
         await publisher.publish_device_reading(
             device_id,
             sample_battery_info,
             vehicle_id=vehicle_id,
             device_type=device_type,
         )
-        
+
         # Verify payload includes vehicle and device type
         args, _ = mock_mqtt_interface.publish.call_args
         payload = args[1]
@@ -122,9 +123,9 @@ class TestMQTTPublisher:
             temperature=20.0,
             state_of_charge=50.0,
         )
-        
+
         await publisher.publish_device_reading(device_id, minimal_reading)
-        
+
         # Verify payload structure with minimal data
         args, _ = mock_mqtt_interface.publish.call_args
         payload = args[1]
@@ -147,20 +148,20 @@ class TestMQTTPublisher:
         """Test device status publication for connected device."""
         device_id = "AA:BB:CC:DD:EE:FF"
         device_type = "BM6"
-        
+
         await publisher.publish_device_status(
             device_id,
             sample_device_status,
             device_type=device_type,
         )
-        
+
         # Verify publish was called with correct parameters
         mock_mqtt_interface.publish.assert_called_once()
         args, kwargs = mock_mqtt_interface.publish.call_args
-        
+
         assert args[0] == f"device/{device_id}/status"
         assert kwargs["retain"] is True  # Status should be retained
-        
+
         # Verify payload structure
         payload = args[1]
         assert payload["device_id"] == device_id
@@ -184,9 +185,9 @@ class TestMQTTPublisher:
             error_code=1001,
             error_message="Connection timeout",
         )
-        
+
         await publisher.publish_device_status(device_id, error_status)
-        
+
         # Verify payload includes error information
         args, _ = mock_mqtt_interface.publish.call_args
         payload = args[1]
@@ -214,16 +215,16 @@ class TestMQTTPublisher:
                 {"id": "device3", "status": "disconnected"},
             ],
         }
-        
+
         await publisher.publish_vehicle_summary(vehicle_id, summary_data)
-        
+
         # Verify publish was called with correct parameters
         mock_mqtt_interface.publish.assert_called_once()
         args, kwargs = mock_mqtt_interface.publish.call_args
-        
+
         assert args[0] == f"vehicle/{vehicle_id}/summary"
         assert kwargs["retain"] is True  # Vehicle summaries should be retained
-        
+
         # Verify payload structure
         payload = args[1]
         assert payload["vehicle_id"] == vehicle_id
@@ -255,23 +256,23 @@ class TestMQTTPublisher:
                 "api": "running",
             },
         }
-        
+
         await publisher.publish_system_status(status_data)
-        
+
         # Verify publish was called with correct parameters
         mock_mqtt_interface.publish.assert_called_once()
         args, kwargs = mock_mqtt_interface.publish.call_args
-        
+
         assert args[0] == "system/status"
         assert kwargs["retain"] is True  # System status should be retained
-        
+
         # Verify payload structure
         payload = args[1]
         assert payload["core"]["running"] is True
         assert payload["storage"]["influxdb_connected"] is True
         assert payload["components"]["mqtt"] == "connected"
         assert "timestamp" in payload
-        
+
         # Verify QoS was temporarily set to 2 for system status
         assert mock_mqtt_interface._mqtt_config["qos"] == 1  # Should be restored
 
@@ -284,10 +285,10 @@ class TestMQTTPublisher:
     ) -> None:
         """Test error handling in publish methods."""
         device_id = "AA:BB:CC:DD:EE:FF"
-        
+
         # Mock publish to raise an exception
         mock_mqtt_interface.publish.side_effect = MQTTConnectionError("Connection lost")
-        
+
         with pytest.raises(MQTTConnectionError):
             await publisher.publish_device_reading(device_id, sample_battery_info)
 
@@ -299,7 +300,7 @@ class TestMQTTPublisher:
     ) -> None:
         """Test timestamp handling in readings."""
         device_id = "AA:BB:CC:DD:EE:FF"
-        
+
         # Test with explicit timestamp
         reading_with_timestamp = BatteryInfo(
             voltage=12.0,
@@ -308,16 +309,16 @@ class TestMQTTPublisher:
             state_of_charge=80.0,
             timestamp=1234567890.0,
         )
-        
+
         await publisher.publish_device_reading(device_id, reading_with_timestamp)
-        
+
         args, _ = mock_mqtt_interface.publish.call_args
         payload = args[1]
         assert payload["timestamp"] == 1234567890.0
-        
+
         # Reset mock
         mock_mqtt_interface.publish.reset_mock()
-        
+
         # Test without timestamp (should use current time)
         reading_without_timestamp = BatteryInfo(
             voltage=12.0,
@@ -325,9 +326,9 @@ class TestMQTTPublisher:
             temperature=25.0,
             state_of_charge=80.0,
         )
-        
+
         await publisher.publish_device_reading(device_id, reading_without_timestamp)
-        
+
         args, _ = mock_mqtt_interface.publish.call_args
         payload = args[1]
         # Should have a timestamp that's a valid ISO format string

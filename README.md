@@ -29,6 +29,7 @@
 - **API Examples**: See `examples/complete_api_example.py` for comprehensive usage examples
 
 ### Additional Documentation
+- **💻 [CLI Documentation](docs/CLI.md)**: Complete command-line interface reference
 - **📖 [Complete API Documentation](docs/API.md)**: Comprehensive API reference with examples
 - **🚀 [Deployment Guide](docs/DEPLOYMENT.md)**: Production deployment scenarios and configurations
 - **🔧 [Troubleshooting Guide](docs/TROUBLESHOOTING.md)**: Common issues and solutions
@@ -203,9 +204,65 @@ curl -X PATCH http://localhost:5000/api/system/config \
 
 ## 🔧 Usage
 
-### Device Management
+Battery Hawk provides both a comprehensive command-line interface and a REST API for all operations.
 
-#### Discover Devices
+### Command Line Interface
+
+The CLI provides complete management capabilities with intuitive commands:
+
+```bash
+# Show all available commands
+battery-hawk --help
+
+# Service management
+battery-hawk service start --api --mqtt --daemon
+battery-hawk service status
+battery-hawk service stop
+
+# Device management
+battery-hawk device scan --duration 10 --connect
+battery-hawk device add AA:BB:CC:DD:EE:FF --device-type BM6 --name "Main Battery"
+battery-hawk device list
+battery-hawk device status AA:BB:CC:DD:EE:FF
+
+# Vehicle management
+battery-hawk vehicle add my-car --name "My Car" --type car
+battery-hawk vehicle associate my-car AA:BB:CC:DD:EE:FF
+battery-hawk vehicle list
+
+# Data management
+battery-hawk data query --device AA:BB:CC:DD:EE:FF --limit 10
+battery-hawk data export readings.csv --format csv --start 2024-01-01T00:00:00
+battery-hawk data stats
+
+# MQTT operations
+battery-hawk mqtt status
+battery-hawk mqtt publish device/test "Hello World"
+battery-hawk mqtt monitor --duration 30
+
+# System monitoring
+battery-hawk system health
+battery-hawk system diagnose
+battery-hawk system metrics
+```
+
+#### CLI Command Groups
+
+| Command Group | Description | Key Commands |
+|---------------|-------------|--------------|
+| `service` | Service management | `start`, `stop`, `status`, `restart` |
+| `device` | Device operations | `scan`, `connect`, `add`, `remove`, `list`, `status`, `readings` |
+| `vehicle` | Vehicle management | `add`, `remove`, `list`, `show`, `associate` |
+| `data` | Data operations | `query`, `export`, `stats`, `cleanup` |
+| `mqtt` | MQTT management | `status`, `publish`, `topics`, `monitor`, `test` |
+| `system` | System monitoring | `health`, `logs`, `metrics`, `diagnose` |
+| `config` | Configuration | `show`, `set`, `save`, `list` |
+
+### REST API Usage
+
+#### Device Management
+
+##### Discover Devices
 ```bash
 # Get all discovered devices
 curl http://localhost:5000/api/devices
@@ -214,7 +271,7 @@ curl http://localhost:5000/api/devices
 curl http://localhost:5000/api/devices/AA:BB:CC:DD:EE:FF
 ```
 
-#### Configure a Device
+##### Configure a Device
 ```bash
 curl -X POST http://localhost:5000/api/devices \
   -H "Content-Type: application/vnd.api+json" \
@@ -232,10 +289,29 @@ curl -X POST http://localhost:5000/api/devices \
   }'
 ```
 
-### Vehicle Management
+#### Vehicle Management
 
-#### Create a Vehicle
+##### CLI Commands
 ```bash
+# Add a new vehicle
+battery-hawk vehicle add my-car --name "My Car" --type car --description "Daily driver"
+
+# List all vehicles
+battery-hawk vehicle list
+
+# Show vehicle details
+battery-hawk vehicle show my-car
+
+# Associate device with vehicle
+battery-hawk vehicle associate my-car AA:BB:CC:DD:EE:FF
+
+# Remove vehicle
+battery-hawk vehicle remove my-car
+```
+
+##### API Commands
+```bash
+# Create a Vehicle
 curl -X POST http://localhost:5000/api/vehicles \
   -H "Content-Type: application/vnd.api+json" \
   -d '{
@@ -248,9 +324,31 @@ curl -X POST http://localhost:5000/api/vehicles \
   }'
 ```
 
-### Data Access
+### Data Access and Management
 
-#### Get Latest Reading
+#### CLI Commands
+```bash
+# Query recent readings
+battery-hawk data query --device AA:BB:CC:DD:EE:FF --limit 10 --format table
+
+# Query readings by time range
+battery-hawk data query --start 2024-01-01T00:00:00 --end 2024-01-02T00:00:00 --format json
+
+# Export data to CSV
+battery-hawk data export readings.csv --format csv --device AA:BB:CC:DD:EE:FF
+
+# Export data to Excel
+battery-hawk data export readings.xlsx --format xlsx --vehicle my-car
+
+# Show database statistics
+battery-hawk data stats
+
+# Clean up old data
+battery-hawk data cleanup --older-than 30d --dry-run
+battery-hawk data cleanup --older-than 1y --force
+```
+
+#### API Commands
 ```bash
 # Get latest reading for a device
 curl http://localhost:5000/api/readings/AA:BB:CC:DD:EE:FF/latest
@@ -259,7 +357,27 @@ curl http://localhost:5000/api/readings/AA:BB:CC:DD:EE:FF/latest
 curl "http://localhost:5000/api/readings/AA:BB:CC:DD:EE:FF?limit=10&offset=0&sort=-timestamp"
 ```
 
-#### System Monitoring
+### System Monitoring
+
+#### CLI Commands
+```bash
+# Comprehensive health check
+battery-hawk system health
+
+# Run diagnostic tests
+battery-hawk system diagnose --verbose
+
+# Show system metrics
+battery-hawk system metrics
+
+# View application logs
+battery-hawk system logs --lines 50 --level INFO
+
+# Follow logs in real-time
+battery-hawk system logs --follow
+```
+
+#### API Commands
 ```bash
 # Get system status
 curl http://localhost:5000/api/system/status
@@ -320,6 +438,12 @@ docker-compose logs battery-hawk | grep -i bluetooth
 
 #### 3. API Connection Issues
 ```bash
+# CLI health check
+battery-hawk system health
+
+# CLI diagnostic check
+battery-hawk system diagnose
+
 # Check if API is running
 curl http://localhost:5000/api/health
 
@@ -330,7 +454,25 @@ curl http://localhost:5000/api/system/status
 docker-compose logs -f battery-hawk
 ```
 
-#### 4. Database Connection Issues
+#### 4. CLI Troubleshooting
+```bash
+# Check CLI installation
+battery-hawk --help
+
+# Test configuration loading
+battery-hawk config list
+
+# Test device scanning
+battery-hawk device scan --duration 5
+
+# Check service status
+battery-hawk service status
+
+# View system logs through CLI
+battery-hawk system logs --lines 20 --level ERROR
+```
+
+#### 5. Database Connection Issues
 ```bash
 # Check InfluxDB status
 docker-compose logs influxdb
@@ -711,6 +853,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📚 Complete Documentation Index
 
 ### Core Documentation
+- **💻 [CLI Documentation](docs/CLI.md)** - Complete command-line interface reference
 - **📖 [API Documentation](docs/API.md)** - Complete REST API reference
 - **🚀 [Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment scenarios
 - **🔧 [Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
@@ -721,7 +864,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **📋 [OpenAPI Spec](http://localhost:5000/api/docs/apispec.json)** - Machine-readable API specification
 
 ### Examples and Tutorials
-- **💻 [Complete API Example](examples/complete_api_example.py)** - Comprehensive usage examples
+- **💻 [CLI Examples](examples/cli_examples.sh)** - Comprehensive command-line usage examples
+- **🌐 [Complete API Example](examples/complete_api_example.py)** - Comprehensive REST API usage examples
 - **🐳 [Docker Examples](docker-compose.yml)** - Container deployment examples
 - **⚙️ [Configuration Examples](config/)** - Sample configuration files
 

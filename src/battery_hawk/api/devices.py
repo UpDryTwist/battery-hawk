@@ -8,6 +8,7 @@ specification for consistent data formatting and error handling.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -48,8 +49,6 @@ def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
             # If we're already in an event loop, we need to use a different approach
             # This is a simplified version - in production you might want to use
             # asyncio.create_task() or similar
-            import concurrent.futures  # noqa: PLC0415
-
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()

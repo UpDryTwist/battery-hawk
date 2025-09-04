@@ -2,6 +2,8 @@
 
 This document provides comprehensive documentation for the Battery Hawk REST API. For interactive documentation, visit `/api/docs/` when the application is running.
 
+> **💡 Alternative Interface**: Battery Hawk also provides a comprehensive command-line interface (CLI) for all operations. See [CLI Documentation](CLI.md) for complete CLI usage.
+
 ## 🌐 API Overview
 
 The Battery Hawk API follows the [JSON-API specification](https://jsonapi.org/) for consistent data formatting and provides comprehensive battery monitoring capabilities.

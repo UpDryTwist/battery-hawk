@@ -700,7 +700,7 @@ class BLEConnectionPool:
             )
 
         try:
-            self.logger.info(
+            self.logger.debug(
                 "Starting notifications for characteristic %s on %s",
                 char_uuid,
                 device_address,
@@ -710,7 +710,7 @@ class BLEConnectionPool:
             # Track the notification
             conn["notifications"][char_uuid] = callback
 
-            self.logger.info(
+            self.logger.debug(
                 "Successfully started notifications for %s on %s",
                 char_uuid,
                 device_address,
@@ -753,7 +753,7 @@ class BLEConnectionPool:
             )
 
         try:
-            self.logger.info(
+            self.logger.debug(
                 "Stopping notifications for characteristic %s on %s",
                 char_uuid,
                 device_address,
@@ -764,7 +764,7 @@ class BLEConnectionPool:
             if char_uuid in conn["notifications"]:
                 del conn["notifications"][char_uuid]
 
-            self.logger.info(
+            self.logger.debug(
                 "Successfully stopped notifications for %s on %s",
                 char_uuid,
                 device_address,

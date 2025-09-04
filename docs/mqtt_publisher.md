@@ -69,7 +69,7 @@ await publisher.publish_device_reading(
     device_id="AA:BB:CC:DD:EE:FF",
     reading=reading,
     vehicle_id="my_vehicle",  # Optional
-    device_type="BM2",       # Optional
+    device_type="BM2",  # Optional
 )
 ```
 

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import pytest
 
@@ -64,14 +67,17 @@ class MockConfigManager(ConfigManager):
         }
         self._listeners = []
 
-    def add_listener(self, listener: Callable[[str, dict[str, Any]], None]) -> None:
+    def register_listener(
+        self,
+        callback: Callable[[str, dict[str, Any]], None],
+    ) -> None:
         """Add configuration change listener."""
-        self._listeners.append(listener)
+        self._listeners.append(callback)
 
-    def _notify_listeners(self, section: str, config: dict[str, Any]) -> None:
+    def _notify_listeners(self, key: str, config: dict[str, Any]) -> None:
         """Notify listeners of configuration changes."""
         for listener in self._listeners:
-            listener(section, config)
+            listener(key, config)
 
 
 @pytest.fixture
@@ -122,28 +128,43 @@ class TestMQTTInterface:
         assert config["port"] == 1883
         assert config["topic_prefix"] == "test_batteryhawk"
 
-    def test_get_mqtt_config_disabled(self, disabled_mqtt_config_manager: MockConfigManager) -> None:
+    def test_get_mqtt_config_disabled(
+        self,
+        disabled_mqtt_config_manager: MockConfigManager,
+    ) -> None:
         """Test getting MQTT configuration when disabled."""
         mqtt_interface = MQTTInterface(disabled_mqtt_config_manager)
         config = mqtt_interface._get_mqtt_config()
         assert config["enabled"] is False
 
-    def test_get_mqtt_config_missing_fields(self, mock_config_manager: MockConfigManager) -> None:
+    def test_get_mqtt_config_missing_fields(
+        self,
+        mock_config_manager: MockConfigManager,
+    ) -> None:
         """Test configuration validation with missing fields."""
         # Remove required field
         del mock_config_manager.configs["system"]["mqtt"]["broker"]
 
-        with pytest.raises(ValueError, match="Missing required MQTT configuration fields"):
+        with pytest.raises(
+            ValueError,
+            match="Missing required MQTT configuration fields",
+        ):
             MQTTInterface(mock_config_manager)
 
-    def test_get_mqtt_config_invalid_port(self, mock_config_manager: MockConfigManager) -> None:
+    def test_get_mqtt_config_invalid_port(
+        self,
+        mock_config_manager: MockConfigManager,
+    ) -> None:
         """Test configuration validation with invalid port."""
         mock_config_manager.configs["system"]["mqtt"]["port"] = 70000
 
         with pytest.raises(ValueError, match="Invalid MQTT port"):
             MQTTInterface(mock_config_manager)
 
-    def test_get_mqtt_config_invalid_qos(self, mock_config_manager: MockConfigManager) -> None:
+    def test_get_mqtt_config_invalid_qos(
+        self,
+        mock_config_manager: MockConfigManager,
+    ) -> None:
         """Test configuration validation with invalid QoS."""
         mock_config_manager.configs["system"]["mqtt"]["qos"] = 5
 
@@ -156,7 +177,10 @@ class TestMQTTInterface:
         assert topic == "test_batteryhawk/devices/status"
 
     @pytest.mark.asyncio
-    async def test_connect_disabled(self, disabled_mqtt_config_manager: MockConfigManager) -> None:
+    async def test_connect_disabled(
+        self,
+        disabled_mqtt_config_manager: MockConfigManager,
+    ) -> None:
         """Test connection when MQTT is disabled."""
         mqtt_interface = MQTTInterface(disabled_mqtt_config_manager)
         await mqtt_interface.connect()
@@ -164,7 +188,11 @@ class TestMQTTInterface:
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_connect_success(self, mock_client_class: MagicMock, mqtt_interface: MQTTInterface) -> None:
+    async def test_connect_success(
+        self,
+        mock_client_class: MagicMock,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test successful MQTT connection."""
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
@@ -176,20 +204,31 @@ class TestMQTTInterface:
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_connect_failure(self, mock_client_class: MagicMock, mqtt_interface: MQTTInterface) -> None:
+    async def test_connect_failure(
+        self,
+        mock_client_class: MagicMock,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test MQTT connection failure."""
         mock_client = AsyncMock()
         mock_client.__aenter__.side_effect = OSError("Connection failed")
         mock_client_class.return_value = mock_client
 
-        with pytest.raises(MQTTConnectionError, match="Failed to connect to MQTT broker"):
+        with pytest.raises(
+            MQTTConnectionError,
+            match="Failed to connect to MQTT broker",
+        ):
             await mqtt_interface.connect()
 
         assert not mqtt_interface.connected
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_connect_retry(self, mock_client_class: MagicMock, retry_mqtt_config_manager: MockConfigManager) -> None:
+    async def test_connect_retry(
+        self,
+        mock_client_class: MagicMock,
+        retry_mqtt_config_manager: MockConfigManager,
+    ) -> None:
         """Test MQTT connection with retry."""
         mqtt_interface = MQTTInterface(retry_mqtt_config_manager)
         mock_client = AsyncMock()
@@ -203,14 +242,21 @@ class TestMQTTInterface:
         assert mock_client.__aenter__.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_disconnect_not_connected(self, mqtt_interface: MQTTInterface) -> None:
+    async def test_disconnect_not_connected(
+        self,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test disconnect when not connected."""
         await mqtt_interface.disconnect()
         assert not mqtt_interface.connected
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_disconnect_success(self, mock_client_class: MagicMock, mqtt_interface: MQTTInterface) -> None:
+    async def test_disconnect_success(
+        self,
+        mock_client_class: MagicMock,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test successful disconnect."""
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
@@ -239,7 +285,11 @@ class TestMQTTInterface:
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_publish_success(self, mock_client_class: MagicMock, mqtt_interface: MQTTInterface) -> None:
+    async def test_publish_success(
+        self,
+        mock_client_class: MagicMock,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test successful message publish."""
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
@@ -267,7 +317,11 @@ class TestMQTTInterface:
 
     @pytest.mark.asyncio
     @patch("battery_hawk.mqtt.client.Client")
-    async def test_subscribe_success(self, mock_client_class: MagicMock, mqtt_interface: MQTTInterface) -> None:
+    async def test_subscribe_success(
+        self,
+        mock_client_class: MagicMock,
+        mqtt_interface: MQTTInterface,
+    ) -> None:
         """Test successful topic subscription."""
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
@@ -279,7 +333,10 @@ class TestMQTTInterface:
         # Subscribe to topic
         await mqtt_interface.subscribe("devices/status", handler)
 
-        mock_client.subscribe.assert_called_once_with("test_batteryhawk/devices/status", qos=1)
+        mock_client.subscribe.assert_called_once_with(
+            "test_batteryhawk/devices/status",
+            qos=1,
+        )
         assert "test_batteryhawk/devices/status" in mqtt_interface._message_handlers
 
     def test_config_change_handler(self, mqtt_interface: MQTTInterface) -> None:

@@ -97,8 +97,8 @@ def configure_request_logging(app: Flask) -> None:
         """Log incoming request information."""
         g.start_time = time.time()
 
-        # Log request details
-        logger.info(
+        # Log request details at DEBUG level for normal operations
+        logger.debug(
             "Request: %s %s from %s - User-Agent: %s",
             request.method,
             request.path,
@@ -116,13 +116,28 @@ def configure_request_logging(app: Flask) -> None:
         """Log response information."""
         duration = time.time() - g.get("start_time", time.time())
 
-        logger.info(
-            "Response: %s %s - Status: %d - Duration: %.3fs",
-            request.method,
-            request.path,
-            response.status_code,
-            duration,
-        )
+        # Log at INFO level for errors or slow requests, DEBUG for normal operations
+        http_error_threshold = 400
+        slow_request_threshold = 1.0
+        if (
+            response.status_code >= http_error_threshold
+            or duration > slow_request_threshold
+        ):
+            logger.info(
+                "Response: %s %s - Status: %d - Duration: %.3fs",
+                request.method,
+                request.path,
+                response.status_code,
+                duration,
+            )
+        else:
+            logger.debug(
+                "Response: %s %s - Status: %d - Duration: %.3fs",
+                request.method,
+                request.path,
+                response.status_code,
+                duration,
+            )
 
         # Add response headers for debugging
         response.headers["X-Response-Time"] = f"{duration:.3f}s"

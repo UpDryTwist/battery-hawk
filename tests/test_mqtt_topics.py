@@ -1,7 +1,16 @@
 """Tests for MQTT topics module."""
 
 import pytest
-from battery_hawk.mqtt.topics import MQTTTopics, TopicInfo
+
+from battery_hawk.mqtt.topics import (
+    MQTTTopics,
+    TopicInfo,
+    device_reading_topic,
+    device_status_topic,
+    discovery_found_topic,
+    system_status_topic,
+    vehicle_summary_topic,
+)
 
 
 class TestMQTTTopics:
@@ -59,7 +68,7 @@ class TestMQTTTopics:
         mac = "AA:BB:CC:DD:EE:FF"
         expected = "battery_hawk/device/AA:BB:CC:DD:EE:FF/+"
         assert topics.device_wildcard(mac) == expected
-        
+
         # All devices wildcard
         expected = "battery_hawk/device/+/+"
         assert topics.device_wildcard() == expected
@@ -82,7 +91,7 @@ class TestMQTTTopics:
         """Test parsing device reading topic."""
         topic = "battery_hawk/device/AA:BB:CC:DD:EE:FF/reading"
         parsed = topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "device"
         assert parsed["mac_address"] == "AA:BB:CC:DD:EE:FF"
@@ -95,7 +104,7 @@ class TestMQTTTopics:
         """Test parsing device status topic."""
         topic = "battery_hawk/device/AA:BB:CC:DD:EE:FF/status"
         parsed = topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "device"
         assert parsed["mac_address"] == "AA:BB:CC:DD:EE:FF"
@@ -106,7 +115,7 @@ class TestMQTTTopics:
         """Test parsing vehicle summary topic."""
         topic = "battery_hawk/vehicle/my_vehicle/summary"
         parsed = topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "vehicle"
         assert parsed["vehicle_id"] == "my_vehicle"
@@ -117,7 +126,7 @@ class TestMQTTTopics:
         """Test parsing system status topic."""
         topic = "battery_hawk/system/status"
         parsed = topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "system"
         assert parsed["topic_type"] == "status"
@@ -128,7 +137,7 @@ class TestMQTTTopics:
         """Test parsing discovery topic."""
         topic = "battery_hawk/discovery/found"
         parsed = topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "discovery"
         assert parsed["topic_type"] == "found"
@@ -138,10 +147,10 @@ class TestMQTTTopics:
         """Test parsing invalid topic."""
         # Wrong prefix
         assert topics.parse_topic("wrong_prefix/device/mac/reading") is None
-        
+
         # No prefix
         assert topics.parse_topic("device/mac/reading") is None
-        
+
         # Incomplete topic
         assert topics.parse_topic("battery_hawk/device") is None
 
@@ -153,13 +162,15 @@ class TestMQTTTopics:
         assert topics.validate_mac_address("AA-BB-CC-DD-EE-FF") is True
         assert topics.validate_mac_address("aa-bb-cc-dd-ee-ff") is True
         assert topics.validate_mac_address("12:34:56:78:9A:BC") is True
-        
+
         # Invalid formats
         assert topics.validate_mac_address("invalid_mac") is False
         assert topics.validate_mac_address("AA:BB:CC:DD:EE") is False  # Too short
         assert topics.validate_mac_address("AA:BB:CC:DD:EE:FF:GG") is False  # Too long
         assert topics.validate_mac_address("GG:BB:CC:DD:EE:FF") is False  # Invalid hex
-        assert topics.validate_mac_address("AA.BB.CC.DD.EE.FF") is False  # Wrong separator
+        assert (
+            topics.validate_mac_address("AA.BB.CC.DD.EE.FF") is False
+        )  # Wrong separator
 
     def test_vehicle_id_validation(self, topics: MQTTTopics) -> None:
         """Test vehicle ID validation."""
@@ -170,9 +181,11 @@ class TestMQTTTopics:
         assert topics.validate_vehicle_id("car1") is True
         assert topics.validate_vehicle_id("boat_2") is True
         assert topics.validate_vehicle_id("test-vehicle-123") is True
-        
+
         # Invalid formats
-        assert topics.validate_vehicle_id("invalid vehicle!") is False  # Space and special char
+        assert (
+            topics.validate_vehicle_id("invalid vehicle!") is False
+        )  # Space and special char
         assert topics.validate_vehicle_id("vehicle@home") is False  # Special character
         assert topics.validate_vehicle_id("vehicle.1") is False  # Dot not allowed
         assert topics.validate_vehicle_id("") is False  # Empty string
@@ -182,7 +195,7 @@ class TestMQTTTopics:
         # Valid Battery Hawk topics
         assert topics.is_battery_hawk_topic("battery_hawk/device/mac/reading") is True
         assert topics.is_battery_hawk_topic("battery_hawk/system/status") is True
-        
+
         # Invalid topics
         assert topics.is_battery_hawk_topic("other_system/device/mac/reading") is False
         assert topics.is_battery_hawk_topic("device/mac/reading") is False
@@ -190,7 +203,7 @@ class TestMQTTTopics:
     def test_get_subscription_topics(self, topics: MQTTTopics) -> None:
         """Test subscription topic list."""
         subscription_topics = topics.get_subscription_topics()
-        
+
         expected = [
             "battery_hawk/device/+/reading",
             "battery_hawk/device/+/status",
@@ -198,7 +211,7 @@ class TestMQTTTopics:
             "battery_hawk/system/status",
             "battery_hawk/discovery/found",
         ]
-        
+
         assert set(subscription_topics) == set(expected)
 
     def test_topic_info_retrieval(self, topics: MQTTTopics) -> None:
@@ -210,49 +223,49 @@ class TestMQTTTopics:
         assert info.qos == 1
         assert info.retain is False
         assert "reading" in info.description.lower()
-        
+
         # System status info
         info = topics.get_topic_info("system_status")
         assert info is not None
         assert info.qos == 2  # Critical
         assert info.retain is True
         assert "system" in info.description.lower()
-        
+
         # Non-existent topic
         assert topics.get_topic_info("non_existent") is None
 
     def test_list_all_patterns(self, topics: MQTTTopics) -> None:
         """Test listing all topic patterns."""
         patterns = topics.list_all_patterns()
-        
+
         expected_keys = [
             "device_reading",
-            "device_status", 
+            "device_status",
             "vehicle_summary",
             "system_status",
-            "discovery_found"
+            "discovery_found",
         ]
-        
+
         assert set(patterns.keys()) == set(expected_keys)
-        
+
         # Verify all values are TopicInfo instances
         for pattern_info in patterns.values():
             assert isinstance(pattern_info, TopicInfo)
-            assert hasattr(pattern_info, 'pattern')
-            assert hasattr(pattern_info, 'description')
-            assert hasattr(pattern_info, 'qos')
-            assert hasattr(pattern_info, 'retain')
-            assert hasattr(pattern_info, 'example')
+            assert hasattr(pattern_info, "pattern")
+            assert hasattr(pattern_info, "description")
+            assert hasattr(pattern_info, "qos")
+            assert hasattr(pattern_info, "retain")
+            assert hasattr(pattern_info, "example")
 
     def test_custom_prefix_parsing(self, custom_topics: MQTTTopics) -> None:
         """Test topic parsing with custom prefix."""
         topic = "custom_hawk/device/AA:BB:CC:DD:EE:FF/reading"
         parsed = custom_topics.parse_topic(topic)
-        
+
         assert parsed is not None
         assert parsed["category"] == "device"
         assert parsed["mac_address"] == "AA:BB:CC:DD:EE:FF"
-        
+
         # Should not parse topics with wrong prefix
         wrong_topic = "battery_hawk/device/AA:BB:CC:DD:EE:FF/reading"
         assert custom_topics.parse_topic(wrong_topic) is None
@@ -264,9 +277,9 @@ class TestMQTTTopics:
             description="Test topic",
             qos=1,
             retain=False,
-            example="test/123/data"
+            example="test/123/data",
         )
-        
+
         assert info.pattern == "test/{id}/data"
         assert info.description == "Test topic"
         assert info.qos == 1
@@ -275,19 +288,14 @@ class TestMQTTTopics:
 
     def test_convenience_functions(self) -> None:
         """Test convenience functions."""
-        from battery_hawk.mqtt.topics import (
-            device_reading_topic,
-            device_status_topic,
-            vehicle_summary_topic,
-            system_status_topic,
-            discovery_found_topic
-        )
-        
         mac = "AA:BB:CC:DD:EE:FF"
         vehicle_id = "test_vehicle"
-        
+
         assert device_reading_topic(mac) == f"battery_hawk/device/{mac}/reading"
         assert device_status_topic(mac) == f"battery_hawk/device/{mac}/status"
-        assert vehicle_summary_topic(vehicle_id) == f"battery_hawk/vehicle/{vehicle_id}/summary"
+        assert (
+            vehicle_summary_topic(vehicle_id)
+            == f"battery_hawk/vehicle/{vehicle_id}/summary"
+        )
         assert system_status_topic() == "battery_hawk/system/status"
         assert discovery_found_topic() == "battery_hawk/discovery/found"

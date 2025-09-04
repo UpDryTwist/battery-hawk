@@ -8,6 +8,7 @@ specification for consistent data formatting and error handling.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -44,8 +45,6 @@ def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            import concurrent.futures  # noqa: PLC0415
-
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()

@@ -131,7 +131,7 @@ class BM6Device(BaseMonitorDevice):
 
             # Request initial data
             await self.request_voltage_temp()
-            self.logger.info(
+            self.logger.debug(
                 "Initial data request sent to BM6 device %s",
                 self.device_address,
             )
@@ -423,7 +423,7 @@ class BM6Device(BaseMonitorDevice):
         try:
             # Build the encrypted command
             command = build_voltage_temp_request()
-            self.logger.info(
+            self.logger.debug(
                 "Sending voltage/temp request to BM6 device %s: %s",
                 self.device_address,
                 command.hex(),
@@ -436,7 +436,7 @@ class BM6Device(BaseMonitorDevice):
                 command,
             )
 
-            self.logger.info(
+            self.logger.debug(
                 "Voltage/temp request sent successfully to BM6 device %s",
                 self.device_address,
             )
@@ -468,8 +468,8 @@ class BM6Device(BaseMonitorDevice):
             # Convert bytearray to bytes for parser compatibility
             data_bytes = bytes(data)
 
-            # Log raw data for debugging at INFO level to help diagnose parsing issues
-            self.logger.info(
+            # Log raw data for debugging at DEBUG level
+            self.logger.debug(
                 "BM6 raw notification from device %s (%d bytes): %s",
                 self.device_address,
                 len(data_bytes),

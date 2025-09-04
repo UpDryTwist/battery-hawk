@@ -151,8 +151,15 @@ class BatteryHawkCore:
 
     async def _disconnect_all_devices(self) -> None:
         """Disconnect all active devices during shutdown."""
-        for mac_address, device in self.active_devices.items():
-            await self._disconnect_single_device(mac_address, device)
+        if self.active_devices:
+            self.logger.info(
+                "Disconnecting %d active devices",
+                len(self.active_devices),
+            )
+            for mac_address, device in self.active_devices.items():
+                await self._disconnect_single_device(mac_address, device)
+        else:
+            self.logger.info("No active devices to disconnect")
 
     async def _disconnect_single_device(
         self,
@@ -161,6 +168,8 @@ class BatteryHawkCore:
     ) -> None:
         """Disconnect a single device and notify event handlers."""
         try:
+            self.logger.info("Disconnecting device %s", mac_address)
+
             # Notify device disconnected event handlers
             await self._notify_event_handlers(
                 "device_disconnected",
@@ -172,6 +181,7 @@ class BatteryHawkCore:
 
             # Disconnect device
             await self.connection_pool.disconnect(mac_address)
+            self.logger.info("Successfully disconnected device %s", mac_address)
         except Exception:
             self.logger.exception("Error disconnecting device %s", mac_address)
 
@@ -320,12 +330,17 @@ class BatteryHawkCore:
         at their specified intervals.
         """
         try:
+            self.logger.info("Starting device polling system")
+            polling_cycle_count = 0
+
             while self.running and not self.shutdown_event.is_set():
                 try:
                     # Get configured devices
                     configured_devices = self.device_registry.get_configured_devices()
+                    polling_cycle_count += 1
 
                     # Start polling tasks for new devices
+                    new_tasks_started = 0
                     for device_info in configured_devices:
                         mac_address = device_info.get("mac_address")
                         polling_interval = device_info.get("polling_interval", 3600)
@@ -338,10 +353,12 @@ class BatteryHawkCore:
                             self.polling_tasks[mac_address] = asyncio.create_task(
                                 self._poll_device(mac_address, polling_interval),
                             )
-                            self.logger.debug(
-                                "Started polling task for device %s",
+                            self.logger.info(
+                                "Started polling for device %s (interval: %ds)",
                                 mac_address,
+                                polling_interval,
                             )
+                            new_tasks_started += 1
 
                     # Clean up completed tasks
                     completed_tasks = [
@@ -349,6 +366,14 @@ class BatteryHawkCore:
                     ]
                     for mac in completed_tasks:
                         del self.polling_tasks[mac]
+
+                    # Log status periodically (every 10 cycles)
+                    if polling_cycle_count % 10 == 0:
+                        self.logger.info(
+                            "Polling status: %d active tasks, %d configured devices",
+                            len(self.polling_tasks),
+                            len(configured_devices),
+                        )
 
                     # Wait before checking for new devices
                     await asyncio.sleep(30)
@@ -361,6 +386,8 @@ class BatteryHawkCore:
 
         except Exception:
             self.logger.exception("Error in device polling system")
+        finally:
+            self.logger.info("Device polling system stopped")
 
     async def _poll_device(self, mac_address: str, polling_interval: int) -> None:
         """
@@ -551,9 +578,14 @@ class BatteryHawkCore:
             )
 
             if success:
-                self.logger.debug(
-                    "Successfully polled and stored reading for device %s",
+                # Log successful reading with key metrics at INFO level
+                self.logger.info(
+                    "Device %s: %.2fV, %.1fA, %.1f°C, %.1f%% SoC",
                     mac_address,
+                    reading.voltage or 0.0,
+                    reading.current or 0.0,
+                    reading.temperature or 0.0,
+                    reading.state_of_charge or 0.0,
                 )
                 # Update polling state to inactive (successful completion)
                 await self.state_manager.update_polling_state(mac_address, active=False)

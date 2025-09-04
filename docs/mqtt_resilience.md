@@ -35,11 +35,11 @@ The client uses exponential backoff with jitter to avoid thundering herd problem
 # Default configuration
 reconnection_config = ReconnectionConfig(
     max_retries=10,
-    initial_retry_delay=1.0,      # Start with 1 second
-    max_retry_delay=300.0,        # Cap at 5 minutes
-    backoff_multiplier=2.0,       # Double each time
-    jitter_factor=0.1,            # Add 10% random jitter
-    connection_timeout=30.0,      # 30 second connection timeout
+    initial_retry_delay=1.0,  # Start with 1 second
+    max_retry_delay=300.0,  # Cap at 5 minutes
+    backoff_multiplier=2.0,  # Double each time
+    jitter_factor=0.1,  # Add 10% random jitter
+    connection_timeout=30.0,  # 30 second connection timeout
 )
 ```
 
@@ -64,8 +64,8 @@ Messages are automatically queued when:
 
 ```python
 # Queue configuration
-message_queue_size = 1000        # Maximum queued messages
-message_retry_limit = 3          # Retry failed messages 3 times
+message_queue_size = 1000  # Maximum queued messages
+message_retry_limit = 3  # Retry failed messages 3 times
 ```
 
 ### Queue Processing
@@ -82,7 +82,7 @@ message_retry_limit = 3          # Retry failed messages 3 times
 The client runs periodic health checks to detect connection issues:
 
 ```python
-health_check_interval = 60.0     # Check every 60 seconds
+health_check_interval = 60.0  # Check every 60 seconds
 ```
 
 Health checks verify:
@@ -109,7 +109,7 @@ mqtt:
   enabled: true
   broker: "localhost"
   port: 1883
-  
+
   # Resilience settings
   max_retries: 10
   initial_retry_delay: 1.0
@@ -226,7 +226,7 @@ stats = mqtt_interface.stats
     "messages_failed": 2,
     "consecutive_failures": 0,
     "queue_size": 5,
-    "last_connection_attempt": 1640995200.0
+    "last_connection_attempt": 1640995200.0,
 }
 ```
 
