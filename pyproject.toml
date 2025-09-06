@@ -93,7 +93,7 @@ flasgger = "^0.9.7.1"
 flask-limiter = "^3.12"
 
 [tool.poetry.group.dev.dependencies]
-poetry = "^1.7.1"
+poetry = "^2.1.4"
 pytest = ">=7.4.3,<9.0.0"
 pre-commit = "^4.0.1"
 ruff = "^0.8.0"
