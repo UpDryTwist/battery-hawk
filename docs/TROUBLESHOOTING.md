@@ -50,6 +50,12 @@ battery-hawk system logs --follow
 
 # Set debug logging level
 battery-hawk config set system logging level DEBUG
+
+# Configure file logging with timestamps
+battery-hawk config set system logging file /var/log/battery-hawk/debug.log
+
+# View current logging configuration
+battery-hawk config show system logging
 ```
 
 #### Using API

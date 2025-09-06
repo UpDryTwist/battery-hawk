@@ -37,7 +37,7 @@ source /app/.venv/bin/activate
 cd /app
 
 if [[ $# -eq 0 ]]; then
-	set -- "python" "-m" ""
+	set -- "python" "-m" "battery_hawk" "service" "start" "--api" "--mqtt"
 fi
 
 if [ "${user}" = '0' ]; then

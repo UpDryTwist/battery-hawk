@@ -75,7 +75,7 @@ cd battery-hawk
 
 # Copy and configure environment
 cp .env.docker .env
-# Edit .env with your settings
+# Edit .env with your settings (including custom ports if needed)
 
 # Development: Build and run with Docker Compose
 docker-compose up -d
@@ -125,9 +125,10 @@ Create a `.env` file in the project root:
 API_HOST=0.0.0.0
 API_PORT=5000
 
-# Logging Configuration
+# Logging Configuration (with timestamps)
 LOG_LEVEL=INFO
 LOG_FILE=/var/log/battery-hawk/battery-hawk.log
+LOG_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Bluetooth Configuration
 BLUETOOTH_MAX_CONCURRENT_CONNECTIONS=5
@@ -161,8 +162,10 @@ api:
 
 logging:
   level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
   file: "/var/log/battery-hawk/battery-hawk.log"
-  max_size: "10MB"
+  max_bytes: 10485760  # 10MB
   backup_count: 5
 
 bluetooth:
@@ -912,6 +915,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **💻 [CLI Examples](examples/cli_examples.sh)** - Comprehensive command-line usage examples
 - **🌐 [Complete API Example](examples/complete_api_example.py)** - Comprehensive REST API usage examples
 - **🐳 [Docker Deployment Guide](docs/DOCKER.md)** - Complete Docker deployment documentation
+- **🐳 [Docker Custom Ports](examples/docker_custom_ports.sh)** - Example using custom port configuration
 - **🐳 [Docker Examples](docker-compose.yml)** - Container deployment examples
 - **⚙️ [Configuration Examples](config/)** - Sample configuration files
 

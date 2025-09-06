@@ -76,7 +76,8 @@ ENV VIRTUAL_ENV=/app/.venv \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
-    LOGFILE=/logs/battery_hawk.log
+    LOGFILE=/logs/battery_hawk.log \
+    BATTERYHAWK_SYSTEM_LOGGING_FILE=/logs/battery_hawk.log
 
 # Security: Run as non-root user
 USER ${USER}

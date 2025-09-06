@@ -108,6 +108,10 @@ bump-my-version = "^0.33.0"
 copier = "^9.5.0"
 pytest-asyncio = "^1.0.0"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["local-instance", "dist", "htmlcov", ".git", ".venv", "node_modules"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

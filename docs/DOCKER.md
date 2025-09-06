@@ -188,12 +188,18 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem nginx/ssl/key.pem
 
 ### Environment Variables
 
-Battery Hawk uses the `BATTERYHAWK_` prefix for all environment variables:
+#### Application Configuration
+Battery Hawk uses the `BATTERYHAWK_` prefix for all application environment variables:
 
 ```bash
 # API Configuration
 BATTERYHAWK_API_PORT=5000
+
+# Logging Configuration (with timestamps)
 BATTERYHAWK_LOGGING_LEVEL=INFO
+BATTERYHAWK_LOGGING_FILE=/logs/battery_hawk.log
+BATTERYHAWK_LOGGING_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+BATTERYHAWK_LOGGING_DATE_FORMAT="%Y-%m-%d %H:%M:%S"
 
 # Database Configuration
 BATTERYHAWK_INFLUXDB_HOST=influxdb
@@ -204,6 +210,50 @@ BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk
 BATTERYHAWK_MQTT_BROKER=mqtt-broker
 BATTERYHAWK_MQTT_PORT=1883
 BATTERYHAWK_MQTT_TOPIC_PREFIX=battery_hawk
+```
+
+#### Port Configuration
+Host port mappings can be customized through environment variables:
+
+```bash
+# Service host ports (for development/bridge networking)
+API_HOST_PORT=5000              # Battery Hawk API
+INFLUXDB_HOST_PORT=8086         # InfluxDB database
+MQTT_HOST_PORT=1883             # MQTT broker
+MQTT_WEBSOCKET_HOST_PORT=9001   # MQTT WebSocket
+ADMINER_HOST_PORT=8080          # Database admin (dev only)
+NGINX_HTTP_HOST_PORT=80         # Nginx HTTP (prod only)
+NGINX_HTTPS_HOST_PORT=443       # Nginx HTTPS (prod only)
+```
+
+**Examples:**
+```bash
+# Use alternative ports to avoid conflicts
+API_HOST_PORT=5001
+INFLUXDB_HOST_PORT=8087
+ADMINER_HOST_PORT=8081
+
+# Start with custom ports
+docker compose up -d
+
+# Test port configuration without starting services
+docker compose --env-file .env config | grep -A 2 "ports:"
+```
+
+#### Testing Port Configuration
+You can verify your port configuration before starting services:
+
+```bash
+# Create test environment file
+echo "API_HOST_PORT=5001
+ADMINER_HOST_PORT=8081
+INFLUXDB_HOST_PORT=8087" > .env.test
+
+# Check the resolved configuration
+docker compose --env-file .env.test config
+
+# Run the custom ports example
+./examples/docker_custom_ports.sh
 ```
 
 ### Configuration Files

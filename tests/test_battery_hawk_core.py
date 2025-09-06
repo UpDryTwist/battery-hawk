@@ -563,6 +563,62 @@ class TestBatteryHawkCore:
         assert isinstance(unknown_handlers, list)
         assert len(unknown_handlers) == 0
 
+    @pytest.mark.asyncio
+    async def test_immediate_baseline_polling(self, core: BatteryHawkCore) -> None:
+        """Test that devices are polled immediately on startup for baseline readings."""
+        # Mock device registry to return a configured device
+        mock_device_info = {
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "device_type": "BM6",
+            "polling_interval": 3600,  # 1 hour
+            "status": "configured",
+        }
+        core.device_registry.get_device = MagicMock(return_value=mock_device_info)
+
+        # Mock the device creation and polling
+        mock_device = MockDevice("AA:BB:CC:DD:EE:FF", "BM6")
+        core.device_factory.create_device = MagicMock(return_value=mock_device)
+        core.state_manager.update_connection_state = AsyncMock()
+        core._notify_event_handlers = AsyncMock()
+
+        # Track calls to _poll_single_device
+        poll_calls = []
+
+        async def track_poll_call(*args: Any, **kwargs: Any) -> None:
+            poll_calls.append((args, kwargs))
+
+        core._poll_single_device = AsyncMock(side_effect=track_poll_call)
+
+        # Set up core state for polling
+        core.running = True
+        core.shutdown_event.clear()
+
+        # Start the polling task
+        task = asyncio.create_task(core._poll_device("AA:BB:CC:DD:EE:FF", 3600))
+
+        # Wait a short time to allow the first poll to complete
+        await asyncio.sleep(0.2)
+
+        # Cancel the task to stop the polling loop
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            # If there was an exception, re-raise it
+            raise
+
+        # Verify that polling happened immediately
+        assert len(poll_calls) >= 1, (
+            f"Expected at least one poll to occur, got {len(poll_calls)} calls"
+        )
+
+        # Verify the device was polled with correct arguments
+        first_call_args, first_call_kwargs = poll_calls[0]
+        assert first_call_args[0] == "AA:BB:CC:DD:EE:FF"
+        assert first_call_args[1] == mock_device_info
+
 
 class TestDeviceRegistry:
     """Test suite for DeviceRegistry."""

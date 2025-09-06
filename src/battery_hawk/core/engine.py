@@ -398,10 +398,15 @@ class BatteryHawkCore:
             polling_interval: Polling interval in seconds
         """
         try:
+            # Flag to track if this is the first poll for immediate baseline reading
+            first_poll = True
+
             while self.running and not self.shutdown_event.is_set():
                 try:
-                    # Wait for the polling interval
-                    await asyncio.sleep(polling_interval)
+                    # For first poll, don't wait - take immediate baseline reading
+                    if not first_poll:
+                        # Wait for the polling interval
+                        await asyncio.sleep(polling_interval)
 
                     if not self.running or self.shutdown_event.is_set():
                         break
@@ -478,6 +483,14 @@ class BatteryHawkCore:
 
                     # Poll the device
                     await self._poll_single_device(mac_address, device_info)
+
+                    # Mark first poll as complete to enable normal interval timing
+                    if first_poll:
+                        first_poll = False
+                        self.logger.info(
+                            "Completed initial baseline reading for device %s",
+                            mac_address,
+                        )
 
                 except asyncio.CancelledError:
                     break

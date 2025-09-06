@@ -77,27 +77,82 @@ from battery_hawk_driver.base.discovery import BLEDiscoveryService
 
 
 def setup_logging(config_manager: ConfigManager) -> None:
-    """Set up basic logging configuration."""
-    log_level = (
-        config_manager.get_config("system").get("logging", {}).get("level", "INFO")
+    """Set up comprehensive logging configuration with timestamps."""
+    logging_config = config_manager.get_config("system").get("logging", {})
+
+    log_level = logging_config.get("level", "INFO")
+    log_format = logging_config.get(
+        "format",
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+    date_format = logging_config.get("date_format", "%Y-%m-%d %H:%M:%S")
+    log_file = logging_config.get("file")
+    max_bytes = logging_config.get("max_bytes", 10485760)  # 10MB
+    backup_count = logging_config.get("backup_count", 5)
 
     # Validate log level
     if not hasattr(logging, log_level):
         print(f"Warning: Invalid log level '{log_level}', using INFO", file=sys.stderr)  # noqa: T201
         log_level = "INFO"
 
-    # Configure root logger
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        stream=sys.stdout,
-        force=True,  # Override any existing configuration
-    )
+    # Clear any existing handlers
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Set up formatters with timestamps
+    formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
+
+    # Always add console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # Add file handler if specified
+    if log_file:
+        try:
+            # Ensure log directory exists
+            log_dir = os.path.dirname(log_file)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+
+            # Use RotatingFileHandler for log rotation
+            from logging.handlers import RotatingFileHandler
+
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+
+            print(f"Logging to file: {log_file}", file=sys.stderr)  # noqa: T201
+        except Exception as e:
+            print(  # noqa: T201
+                f"Warning: Could not set up file logging to '{log_file}': {e}",
+                file=sys.stderr,
+            )
+
+    # Set root logger level
+    root_logger.setLevel(getattr(logging, log_level))
 
     # Reduce noise from external libraries
     logging.getLogger("bleak").setLevel(logging.WARNING)
     logging.getLogger("aiomqtt").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+    # Log the configuration
+    logger = logging.getLogger("battery_hawk.config")
+    logger.info("Logging configured: level=%s, format includes timestamps", log_level)
+    if log_file:
+        logger.info(
+            "File logging enabled: %s (max_bytes=%d, backup_count=%d)",
+            log_file,
+            max_bytes,
+            backup_count,
+        )
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Log the configuration

@@ -23,7 +23,14 @@ CONFIG_FILES: dict[str, str] = {
 DEFAULTS: dict[str, dict] = {
     "system": {
         "version": "1.0",
-        "logging": {"level": "INFO"},
+        "logging": {
+            "level": "INFO",
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "date_format": "%Y-%m-%d %H:%M:%S",
+            "file": None,
+            "max_bytes": 10485760,  # 10MB
+            "backup_count": 5,
+        },
         "bluetooth": {"max_concurrent_connections": 3, "test_mode": False},
         "discovery": {"initial_scan": True, "scan_duration": 10},
         "influxdb": {

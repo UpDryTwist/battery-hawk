@@ -165,3 +165,11 @@ node_modules/
 # Task files
 # tasks.json
 # tasks/
+
+# Local Instance data
+local-instance/logs/
+local-instance/influxdb-data/
+local-instance/data/
+local-instance/config/
+local-instance/mosquitto/data/
+local-instance/mosquitto/log/

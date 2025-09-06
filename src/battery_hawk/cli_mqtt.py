@@ -346,12 +346,23 @@ async def mqtt_service_test(config_manager: ConfigManager) -> int:
 
 
 def setup_mqtt_logging() -> None:
-    """Set up logging for MQTT CLI commands."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        force=True,  # Override any existing configuration
+    """Set up logging for MQTT CLI commands with timestamps."""
+    # Enhanced format with explicit timestamp format
+    formatter = logging.Formatter(
+        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    # Clear any existing handlers
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Set up console handler with timestamp formatter
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+    root_logger.setLevel(logging.INFO)
 
     # Reduce noise from external libraries
     logging.getLogger("aiomqtt").setLevel(logging.WARNING)
@@ -360,4 +371,4 @@ def setup_mqtt_logging() -> None:
 
     # Log the configuration
     logger = logging.getLogger("battery_hawk.mqtt_cli")
-    logger.info("MQTT CLI logging configured at INFO level")
+    logger.info("MQTT CLI logging configured with timestamps at INFO level")

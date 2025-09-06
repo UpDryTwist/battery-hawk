@@ -64,7 +64,8 @@ COPY --chown=${USER}:${GROUP} --chmod=0755 utils       /app/utils
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
-    LOGFILE=/logs/battery_hawk.log
+    LOGFILE=/logs/battery_hawk.log \
+    BATTERYHAWK_SYSTEM_LOGGING_FILE=/logs/battery_hawk.log
 
 # TODO:
 #    CONFIGFILE=/config/battery_hawk.yaml \
@@ -78,5 +79,3 @@ VOLUME /config /logs
 EXPOSE 5000
 
 ENTRYPOINT ["/app/run_scripts/start_module.sh"]
-
-CMD ["python", "-m", "battery_hawk"]

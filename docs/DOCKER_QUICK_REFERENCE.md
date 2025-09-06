@@ -100,20 +100,32 @@ battery-hawk/
 
 ## 🔧 Environment Variables
 
-### Required
+### Application Configuration (Required)
 ```bash
 BATTERYHAWK_INFLUXDB_HOST=influxdb
 BATTERYHAWK_INFLUXDB_PORT=8086
 BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk
 BATTERYHAWK_LOGGING_LEVEL=INFO
+BATTERYHAWK_LOGGING_FILE=/logs/battery_hawk.log  # Enables file logging with timestamps
 ```
 
-### Optional
+### Application Configuration (Optional)
 ```bash
 BATTERYHAWK_API_PORT=5000
 BATTERYHAWK_MQTT_BROKER=mqtt-broker
 BATTERYHAWK_MQTT_PORT=1883
 BATTERYHAWK_MQTT_TOPIC_PREFIX=battery_hawk
+```
+
+### Port Configuration (Host Ports)
+```bash
+API_HOST_PORT=5000              # Battery Hawk API
+INFLUXDB_HOST_PORT=8086         # InfluxDB database
+MQTT_HOST_PORT=1883             # MQTT broker
+MQTT_WEBSOCKET_HOST_PORT=9001   # MQTT WebSocket
+ADMINER_HOST_PORT=8080          # Database admin (dev)
+NGINX_HTTP_HOST_PORT=80         # Nginx HTTP (prod)
+NGINX_HTTPS_HOST_PORT=443       # Nginx HTTPS (prod)
 ```
 
 ## 🏥 Health Checks
@@ -151,14 +163,24 @@ docker-compose ps
 
 ## 📊 Ports
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Battery Hawk | 5000 | API server |
-| InfluxDB | 8086 | Database |
-| MQTT | 1883 | MQTT broker |
-| MQTT WebSocket | 9001 | WebSocket |
-| Adminer | 8080 | DB admin (dev only) |
-| Nginx | 80/443 | Reverse proxy (prod) |
+| Service | Default Port | Environment Variable | Purpose |
+|---------|--------------|---------------------|---------|
+| Battery Hawk | 5000 | `API_HOST_PORT` | API server |
+| InfluxDB | 8086 | `INFLUXDB_HOST_PORT` | Database |
+| MQTT | 1883 | `MQTT_HOST_PORT` | MQTT broker |
+| MQTT WebSocket | 9001 | `MQTT_WEBSOCKET_HOST_PORT` | WebSocket |
+| Adminer | 8080 | `ADMINER_HOST_PORT` | DB admin (dev only) |
+| Nginx HTTP | 80 | `NGINX_HTTP_HOST_PORT` | HTTP (prod) |
+| Nginx HTTPS | 443 | `NGINX_HTTPS_HOST_PORT` | HTTPS (prod) |
+
+### Custom Port Examples
+```bash
+# Avoid port conflicts
+API_HOST_PORT=5001 ADMINER_HOST_PORT=8081 docker compose up -d
+
+# Use high ports for non-root deployment
+NGINX_HTTP_HOST_PORT=8080 NGINX_HTTPS_HOST_PORT=8443 docker compose -f docker-compose.prod.yml up -d
+```
 
 ## 🆘 Common Issues
 
