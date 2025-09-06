@@ -75,7 +75,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 VOLUME /config /logs
 
-# EXPOSE <port>
+EXPOSE 5000
+
 ENTRYPOINT ["/app/run_scripts/start_module.sh"]
 
-CMD []
+CMD ["python", "-m", "battery_hawk"]

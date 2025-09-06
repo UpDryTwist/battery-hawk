@@ -27,6 +27,10 @@ help:
 	@echo "  fast-build        to build with just unit tests and version bump"
 	@echo "  max-build         to run a complete dependencies refresh, full build, and docker build/publish"
 	@echo "  fast-docker-build to run the minimal docker build and publish"
+	@echo "  docker-dev        to start development Docker stack"
+	@echo "  docker-prod       to start production Docker stack"
+	@echo "  docker-down       to stop Docker stack"
+	@echo "  docker-logs       to view Docker logs"
 	@echo "  publish-to-pypi   to publish to PyPI"
 	@echo "  autoupdate        to update dependencies"
 	@echo "  forced-update     to force update dependencies (clear Poetry cache)"
@@ -223,6 +227,23 @@ full-build: full-commit-ready version-build
 max-build: autoupdate full-build docker-build
 
 fast-docker-build: just-unit bump-version-build docker-publish-one
+
+# Docker development targets
+docker-dev:
+	@docker-compose up -d
+
+docker-prod:
+	@docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+docker-down:
+	@docker-compose down
+
+docker-logs:
+	@docker-compose logs -f
+
+docker-clean:
+	@docker-compose down -v
+	@docker system prune -f
 
 check-uncommitted:
 	@if [ -n "$(shell git status --porcelain)" ]; then echo "Uncommitted changes in Git"; git status --short; exit 1; fi

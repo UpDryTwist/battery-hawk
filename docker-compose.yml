@@ -6,15 +6,15 @@ services:
     container_name: battery-hawk
     restart: unless-stopped
     network_mode: host
-    privileged: true
+    privileged: true  # Required for Bluetooth Low Energy access
     cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
+      - NET_ADMIN  # Required for BLE adapter control
+      - SYS_ADMIN  # Required for BLE operations
     volumes:
       - ./local-instance/data:/data
       - ./local-instance/config:/config
       - ./local-instance/logs:/logs
-      - /var/run/dbus:/var/run/dbus
+      - /var/run/dbus:/var/run/dbus:ro  # Read-only access to D-Bus
     environment:
       - BATTERYHAWK_INFLUXDB_HOST=localhost
       - BATTERYHAWK_INFLUXDB_PORT=8086
@@ -29,7 +29,20 @@ services:
     depends_on:
       - influxdb
       - mqtt-broker
-    command: ["python", "-m", "battery_hawk"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
 
   influxdb:
     image: influxdb:1.8
@@ -38,12 +51,26 @@ services:
     ports:
       - "8086:8086"
     volumes:
-      - ./local-instance/influxdb-data:/var/lib/influxdb
+      - influxdb-data:/var/lib/influxdb
     environment:
       - INFLUXDB_DB=battery_hawk
       - INFLUXDB_HTTP_AUTH_ENABLED=false
       - INFLUXDB_ADMIN_USER=admin
       - INFLUXDB_ADMIN_PASSWORD=admin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
 
   mqtt-broker:
     image: eclipse-mosquitto:2.0
@@ -53,10 +80,24 @@ services:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - ./local-instance/mosquitto/config:/mosquitto/config
-      - ./local-instance/mosquitto/data:/mosquitto/data
+      - ./local-instance/mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
       - ./local-instance/mosquitto/log:/mosquitto/log
     command: mosquitto -c /mosquitto/config/mosquitto.conf
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "health", "-m", "test", "-q", "0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
 
 volumes:
   influxdb-data:

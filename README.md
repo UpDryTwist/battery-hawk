@@ -73,12 +73,24 @@ python -m battery_hawk
 git clone https://github.com/UpDryTwist/battery-hawk.git
 cd battery-hawk
 
-# Build and run with Docker Compose
+# Copy and configure environment
+cp .env.docker .env
+# Edit .env with your settings
+
+# Development: Build and run with Docker Compose
 docker-compose up -d
+
+# Production: Use production configuration
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # View logs
 docker-compose logs -f battery-hawk
+
+# Health check
+curl http://localhost:5000/api/health
 ```
+
+> 📖 **For comprehensive Docker documentation, see [Docker Deployment Guide](docs/DOCKER.md)**
 
 #### Option 3: Using Make
 
@@ -391,21 +403,51 @@ curl http://localhost:5000/api/system/config
 
 ### Using Docker Compose
 
-The included `docker-compose.yml` provides a complete stack with InfluxDB and optional MQTT:
+The included Docker Compose configuration provides a complete stack with InfluxDB and MQTT:
 
+#### Development Stack
 ```bash
-# Start the complete stack
+# Start development stack (includes debugging tools)
 docker-compose up -d
 
 # View logs
 docker-compose logs -f
 
+# Access services:
+# - API: http://localhost:5000
+# - Adminer (DB admin): http://localhost:8080
+# - MQTT: localhost:1883
+```
+
+#### Production Stack
+```bash
+# Start production stack with security hardening
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# With custom environment
+docker-compose --env-file .env.production -f docker-compose.prod.yml up -d
+
+# Monitor health
+docker-compose ps
+curl https://your-domain.com/api/health
+```
+
+#### Management Commands
+```bash
 # Stop the stack
 docker-compose down
 
+# Reset data (removes volumes)
+docker-compose down -v
+
 # Update and restart
 docker-compose pull && docker-compose up -d
+
+# View resource usage
+docker stats
 ```
+
+> 📖 **For detailed Docker configuration, security, and troubleshooting, see [Docker Deployment Guide](docs/DOCKER.md)**
 
 ## 🐛 Troubleshooting
 
@@ -662,11 +704,14 @@ mypy src/battery_hawk/api/
 # Build development image
 docker build -t battery-hawk:dev .
 
-# Build production image
-docker build -t battery-hawk:latest -f Dockerfile.prod .
+# Build production image (optimized)
+docker build -f Dockerfile.prod -t battery-hawk:prod .
 
-# Multi-platform build
+# Multi-platform build for ARM/x64
 docker buildx build --platform linux/amd64,linux/arm64 -t battery-hawk:latest .
+
+# Build with specific target
+docker build --target runtime -t battery-hawk:runtime .
 ```
 
 #### Release Process
@@ -866,6 +911,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Examples and Tutorials
 - **💻 [CLI Examples](examples/cli_examples.sh)** - Comprehensive command-line usage examples
 - **🌐 [Complete API Example](examples/complete_api_example.py)** - Comprehensive REST API usage examples
+- **🐳 [Docker Deployment Guide](docs/DOCKER.md)** - Complete Docker deployment documentation
 - **🐳 [Docker Examples](docker-compose.yml)** - Container deployment examples
 - **⚙️ [Configuration Examples](config/)** - Sample configuration files
 

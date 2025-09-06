@@ -6,6 +6,7 @@ This guide covers various deployment scenarios for Battery Hawk, from developmen
 
 ### 1. Docker Compose (Recommended)
 Best for most use cases, provides complete stack with dependencies.
+> 📖 **For comprehensive Docker documentation, see [Docker Deployment Guide](DOCKER.md)**
 
 ### 2. Standalone Docker
 For custom container orchestration or existing infrastructure.
@@ -18,6 +19,8 @@ For scalable, cloud-native deployments.
 
 ## 🐳 Docker Compose Deployment
 
+> 📖 **For detailed Docker setup, configuration, and troubleshooting, see [Docker Deployment Guide](DOCKER.md)**
+
 ### Quick Start
 ```bash
 # Clone repository
@@ -25,11 +28,14 @@ git clone https://github.com/UpDryTwist/battery-hawk.git
 cd battery-hawk
 
 # Configure environment
-cp .env.example .env
+cp .env.docker .env
 # Edit .env with your settings
 
-# Start services
+# Development: Start services
 docker-compose up -d
+
+# Production: Use production configuration
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Verify deployment
 curl http://localhost:5000/api/health

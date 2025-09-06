@@ -56,9 +56,9 @@ echo "------------------------"
 # Add a vehicle
 echo "Adding a vehicle..."
 battery-hawk vehicle add my-car \
-  --name "My Car" \
-  --type car \
-  --description "Daily driver vehicle"
+	--name "My Car" \
+	--type car \
+	--description "Daily driver vehicle"
 
 # List vehicles
 echo "Listing vehicles..."
@@ -165,7 +165,7 @@ echo "-------------------------"
 
 echo "Example automation scripts:"
 
-cat << 'EOF'
+cat <<'EOF'
 
 # Daily health check script
 #!/bin/bash

@@ -1,0 +1,79 @@
+# Development Docker Compose override
+# This file is automatically loaded by docker-compose and provides development-specific settings
+
+version: '3.8'
+
+services:
+  battery-hawk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./local-instance/data:/data
+      - ./local-instance/config:/config
+      - ./local-instance/logs:/logs
+    environment:
+      # Development-specific environment variables
+      - BATTERYHAWK_LOGGING_LEVEL=DEBUG
+      - BATTERYHAWK_SYSTEM_BLUETOOTH_TEST_MODE=true
+      - PYTHONDONTWRITEBYTECODE=0  # Allow bytecode for faster development
+    ports:
+      - "5000:5000"  # Expose API port for development
+    # Remove resource limits for development
+    deploy:
+      resources: {}
+
+  influxdb:
+    ports:
+      - "8086:8086"
+    volumes:
+      # Use local directory for development data
+      - ./local-instance/influxdb-data:/var/lib/influxdb
+    environment:
+      # Development database settings
+      - INFLUXDB_HTTP_AUTH_ENABLED=false
+      - INFLUXDB_LOGGING_LEVEL=info
+
+  mqtt-broker:
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      # Use local directories for development
+      - ./local-instance/mosquitto/config:/mosquitto/config:ro
+      - ./local-instance/mosquitto/data:/mosquitto/data
+      - ./local-instance/mosquitto/log:/mosquitto/log
+
+  # Development tools
+  adminer:
+    image: adminer:latest
+    container_name: battery-hawk-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=influxdb
+    depends_on:
+      - influxdb
+
+  # MQTT client for testing
+  mqtt-client:
+    image: eclipse-mosquitto:2.0
+    container_name: battery-hawk-mqtt-client
+    depends_on:
+      - mqtt-broker
+    command: >
+      sh -c "
+        echo 'MQTT Client ready for testing';
+        echo 'Subscribe: mosquitto_sub -h mqtt-broker -t battery_hawk/#';
+        echo 'Publish: mosquitto_pub -h mqtt-broker -t battery_hawk/test -m \"test message\"';
+        tail -f /dev/null
+      "
+
+networks:
+  default:
+    name: battery-hawk-dev
