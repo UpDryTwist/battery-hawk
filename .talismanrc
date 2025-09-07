@@ -1,6 +1,10 @@
 fileignoreconfig:
   - filename: poetry.lock
     ignore_detectors: [filecontent]
+  - filename: examples/auto_configuration_example.py
+    ignore_detectors: [filecontent]
+  - filename: tests/test_auto_configuration.py
+    ignore_detectors: [filecontent]
 version: ""
 scopeconfig:
   - scope: python
