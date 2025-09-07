@@ -563,6 +563,58 @@ def get_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="Output format (default: table)",
     )
 
+    # device auto-config
+    device_autoconfig_parser = device_subparsers.add_parser(
+        "auto-config",
+        help="Auto-configuration management",
+        description="Manage automatic device configuration",
+    )
+    autoconfig_subparsers = device_autoconfig_parser.add_subparsers(
+        dest="autoconfig_command",
+        required=True,
+    )
+
+    # device auto-config status
+    autoconfig_status_parser = autoconfig_subparsers.add_parser(
+        "status",
+        help="Show auto-configuration status",
+        description="Show current auto-configuration settings and status",
+    )
+    _ = autoconfig_status_parser.add_argument(
+        "--format",
+        choices=["json", "table"],
+        default="table",
+        help="Output format (default: table)",
+    )
+
+    # device auto-config enable
+    _ = autoconfig_subparsers.add_parser(
+        "enable",
+        help="Enable auto-configuration",
+        description="Enable automatic configuration of discovered devices. "
+        "Can also be controlled via BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_ENABLED=true",
+    )
+
+    # device auto-config disable
+    _ = autoconfig_subparsers.add_parser(
+        "disable",
+        help="Disable auto-configuration",
+        description="Disable automatic configuration of discovered devices. "
+        "Can also be controlled via BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_ENABLED=false",
+    )
+
+    # device auto-config run
+    autoconfig_run_parser = autoconfig_subparsers.add_parser(
+        "run",
+        help="Run auto-configuration now",
+        description="Manually trigger auto-configuration for discovered devices",
+    )
+    _ = autoconfig_run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be configured without making changes",
+    )
+
     # vehicle
     vehicle_parser = subparsers.add_parser(
         "vehicle",
@@ -2072,6 +2124,243 @@ async def device_readings(
         return 1
 
 
+async def device_autoconfig_status(
+    config_manager: ConfigManager,
+    output_format: str,
+) -> int:
+    """
+    Show auto-configuration status.
+
+    Args:
+        config_manager: Configuration manager instance
+        output_format: Output format ('json' or 'table')
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        logger = logging.getLogger("battery_hawk.autoconfig_status")
+
+        discovery_config = config_manager.get_config("system").get("discovery", {})
+        auto_config = discovery_config.get("auto_configure", {})
+
+        status_data = {
+            "enabled": auto_config.get("enabled", False),
+            "confidence_threshold": auto_config.get("confidence_threshold", 0.8),
+            "default_polling_interval": auto_config.get(
+                "default_polling_interval",
+                3600,
+            ),
+            "auto_assign_names": auto_config.get("auto_assign_names", True),
+            "rules": auto_config.get("rules", {}),
+        }
+
+        if output_format == "json":
+            sys.stdout.write(json.dumps(status_data, indent=2) + "\n")
+        else:
+            logger.info("Auto-Configuration Status:")
+            logger.info("=" * 50)
+            logger.info("Enabled: %s", status_data["enabled"])
+            logger.info(
+                "Confidence Threshold: %.2f",
+                status_data["confidence_threshold"],
+            )
+            logger.info(
+                "Default Polling Interval: %ds",
+                status_data["default_polling_interval"],
+            )
+            logger.info("Auto Assign Names: %s", status_data["auto_assign_names"])
+            logger.info("")
+            logger.info("Device Type Rules:")
+            for device_type, rules in status_data["rules"].items():
+                logger.info("  %s:", device_type)
+                logger.info("    Auto Configure: %s", rules.get("auto_configure", True))
+                logger.info(
+                    "    Name Template: %s",
+                    rules.get("default_name_template", "N/A"),
+                )
+                logger.info(
+                    "    Polling Interval: %ds",
+                    rules.get("polling_interval", 3600),
+                )
+                logger.info("    Priority: %d", rules.get("priority", 0))
+
+        return 0
+
+    except Exception:
+        logger = logging.getLogger("battery_hawk.autoconfig_status")
+        logger.exception("Failed to get auto-configuration status")
+        return 1
+
+
+async def device_autoconfig_enable(config_manager: ConfigManager) -> int:
+    """
+    Enable auto-configuration.
+
+    Args:
+        config_manager: Configuration manager instance
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        logger = logging.getLogger("battery_hawk.autoconfig_enable")
+
+        # Update configuration
+        system_config = config_manager.get_config("system")
+        if "discovery" not in system_config:
+            system_config["discovery"] = {}
+        if "auto_configure" not in system_config["discovery"]:
+            system_config["discovery"]["auto_configure"] = {}
+
+        system_config["discovery"]["auto_configure"]["enabled"] = True
+
+        # Save configuration
+        config_manager.set_config("system", system_config)
+        config_manager.save_config("system")
+
+        logger.info("Auto-configuration enabled successfully")
+        return 0
+
+    except Exception:
+        logger = logging.getLogger("battery_hawk.autoconfig_enable")
+        logger.exception("Failed to enable auto-configuration")
+        return 1
+
+
+async def device_autoconfig_disable(config_manager: ConfigManager) -> int:
+    """
+    Disable auto-configuration.
+
+    Args:
+        config_manager: Configuration manager instance
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        logger = logging.getLogger("battery_hawk.autoconfig_disable")
+
+        # Update configuration
+        system_config = config_manager.get_config("system")
+        if "discovery" not in system_config:
+            system_config["discovery"] = {}
+        if "auto_configure" not in system_config["discovery"]:
+            system_config["discovery"]["auto_configure"] = {}
+
+        system_config["discovery"]["auto_configure"]["enabled"] = False
+
+        # Save configuration
+        config_manager.set_config("system", system_config)
+        config_manager.save_config("system")
+
+        logger.info("Auto-configuration disabled successfully")
+        return 0
+
+    except Exception:
+        logger = logging.getLogger("battery_hawk.autoconfig_disable")
+        logger.exception("Failed to disable auto-configuration")
+        return 1
+
+
+async def device_autoconfig_run(
+    config_manager: ConfigManager,
+    dry_run: bool,
+) -> int:
+    """
+    Run auto-configuration manually.
+
+    Args:
+        config_manager: Configuration manager instance
+        dry_run: If True, show what would be configured without making changes
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        from battery_hawk.core.auto_config import AutoConfigurationService
+        from battery_hawk.core.registry import DeviceRegistry
+        from battery_hawk_driver.base.connection import BLEConnectionPool
+        from battery_hawk_driver.base.device_factory import DeviceFactory
+        from battery_hawk_driver.base.discovery import BLEDiscoveryService
+
+        logger = logging.getLogger("battery_hawk.autoconfig_run")
+
+        # Initialize services
+        bluetooth_config = config_manager.get_config("system").get("bluetooth", {})
+        test_mode = bluetooth_config.get("test_mode", False)
+        connection_pool = BLEConnectionPool(config_manager, test_mode=test_mode)
+        device_factory = DeviceFactory(connection_pool)
+        auto_config_service = AutoConfigurationService(config_manager, device_factory)
+        device_registry = DeviceRegistry(config_manager, auto_config_service)
+
+        if not auto_config_service.is_enabled():
+            logger.error("Auto-configuration is disabled")
+            return 1
+
+        # Get discovered devices
+        discovery_service = BLEDiscoveryService(config_manager)
+        discovered_devices = discovery_service.discovered_devices
+
+        if not discovered_devices:
+            logger.info("No discovered devices found. Run 'scan' first.")
+            return 0
+
+        logger.info("Processing %d discovered devices...", len(discovered_devices))
+
+        if dry_run:
+            logger.info("DRY RUN - No changes will be made")
+
+        configured_count = 0
+        for mac_address, device_info in discovered_devices.items():
+            # Check if device should be auto-configured
+            advertisement_data = device_info.get("advertisement_data", {})
+            detected_type = device_factory.auto_detect_device_type(advertisement_data)
+
+            if detected_type and auto_config_service.should_auto_configure_device(
+                mac_address,
+                device_info,
+                detected_type,
+            ):
+                if dry_run:
+                    friendly_name = auto_config_service.generate_device_name(
+                        mac_address,
+                        detected_type,
+                        device_info,
+                    )
+                    polling_interval = auto_config_service.get_polling_interval(
+                        detected_type,
+                    )
+                    logger.info(
+                        "Would configure %s as %s (%s) with %ds polling",
+                        mac_address,
+                        detected_type,
+                        friendly_name,
+                        polling_interval,
+                    )
+                    configured_count += 1
+                else:
+                    success = await auto_config_service.auto_configure_device(
+                        mac_address,
+                        device_info,
+                        device_registry,
+                    )
+                    if success:
+                        configured_count += 1
+
+        if dry_run:
+            logger.info("Would configure %d devices", configured_count)
+        else:
+            logger.info("Successfully configured %d devices", configured_count)
+
+        return 0
+
+    except Exception:
+        logger = logging.getLogger("battery_hawk.autoconfig_run")
+        logger.exception("Failed to run auto-configuration")
+        return 1
+
+
 async def vehicle_list(config_manager: ConfigManager, output_format: str) -> int:
     """
     List vehicles.
@@ -3453,6 +3742,19 @@ def _handle_command(opts: argparse.Namespace, config_manager: ConfigManager) -> 
                     opts.format,
                 ),
             )
+        if opts.device_command == "auto-config":
+            if opts.autoconfig_command == "status":
+                return asyncio.run(
+                    device_autoconfig_status(config_manager, opts.format),
+                )
+            if opts.autoconfig_command == "enable":
+                return asyncio.run(device_autoconfig_enable(config_manager))
+            if opts.autoconfig_command == "disable":
+                return asyncio.run(device_autoconfig_disable(config_manager))
+            if opts.autoconfig_command == "run":
+                return asyncio.run(
+                    device_autoconfig_run(config_manager, opts.dry_run),
+                )
 
     if opts.command == "vehicle":
         if opts.vehicle_command == "list":

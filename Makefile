@@ -225,13 +225,22 @@ fast-build: just-unit version-build
 
 full-build: full-commit-ready version-build
 
-max-build: autoupdate full-build docker-build
+max-build: autoupdate full-build docker-build docker-dev-build
 
 fast-docker-build: just-unit bump-version-build docker-publish-one
 
 # Docker development targets
 docker-dev:
 	@docker compose up -d
+
+docker-dev-build:
+	@docker compose down -v
+	@docker system prune -f
+	@docker compose build --no-cache battery-hawk
+
+docker-dev-clean: docker-dev-build
+	@docker compose up -d
+	@docker compose logs -f
 
 docker-prod:
 	@docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d

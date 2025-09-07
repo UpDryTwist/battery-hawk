@@ -38,13 +38,23 @@ class DeviceFactory:
     DETECTION_PATTERNS: ClassVar[dict[str, dict[str, Any]]] = {
         "BM6": {
             "name_prefixes": ["BM6", "Battery Monitor 6"],
-            "service_uuids": ["0000ff00-0000-1000-8000-00805f9b34fb"],
+            "service_uuids": [
+                "0000ff00-0000-1000-8000-00805f9b34fb",
+                "0000fff0-0000-1000-8000-00805f9b34fb",  # Common BM6 service UUID
+            ],
             "manufacturer_data_patterns": [b"BM6", b"Battery Monitor 6"],
+            "manufacturer_ids": [3218],  # Common BM6 manufacturer ID
+            "confidence_score": 0.9,  # High confidence for BM6 detection
         },
         "BM2": {
             "name_prefixes": ["BM2", "Battery Monitor 2"],
-            "service_uuids": ["0000ff00-0000-1000-8000-00805f9b34fb"],
+            "service_uuids": [
+                "0000ff00-0000-1000-8000-00805f9b34fb",
+                "0000fff0-0000-1000-8000-00805f9b34fb",
+            ],
             "manufacturer_data_patterns": [b"BM2", b"Battery Monitor 2"],
+            "manufacturer_ids": [3218],  # May share manufacturer ID with BM6
+            "confidence_score": 0.8,  # Lower confidence due to potential overlap
         },
     }
 
@@ -128,8 +138,11 @@ class DeviceFactory:
             advertisement_data,
         )
 
-        # Handle None or invalid name
-        device_name = advertisement_data.get("name", "")
+        # Handle None or invalid name - check both 'name' and 'local_name'
+        device_name = advertisement_data.get("local_name") or advertisement_data.get(
+            "name",
+            "",
+        )
         if device_name is None:
             device_name = ""
         device_name = str(device_name).upper()
@@ -139,12 +152,34 @@ class DeviceFactory:
         if service_uuids is None or not isinstance(service_uuids, list):
             service_uuids = []
 
-        # Handle None or invalid manufacturer_data
-        manufacturer_data = advertisement_data.get("manufacturer_data", b"")
+        # Handle manufacturer_data - can be dict or bytes
+        manufacturer_data = advertisement_data.get("manufacturer_data", {})
         if manufacturer_data is None:
-            manufacturer_data = b""
+            manufacturer_data = {}
 
         # Primary detection: Check device name for BM6 or BM2
+        detected_type = self._detect_by_device_name(device_name)
+        if detected_type:
+            return detected_type
+
+        # Secondary detection: Check manufacturer data patterns and IDs
+        detected_type = self._detect_by_manufacturer_data(manufacturer_data)
+        if detected_type:
+            return detected_type
+
+        # Tertiary detection: Check service UUIDs (least specific)
+        detected_type = self._detect_by_service_uuids(service_uuids)
+        if detected_type:
+            return detected_type
+
+        self.logger.warning(
+            "Could not auto-detect device type from advertisement: %s",
+            advertisement_data,
+        )
+        return None
+
+    def _detect_by_device_name(self, device_name: str) -> str | None:
+        """Detect device type by device name."""
         if "BM6" in device_name:
             self.logger.info(
                 "Detected BM6 by device name: '%s' contains 'BM6'",
@@ -157,17 +192,55 @@ class DeviceFactory:
                 device_name,
             )
             return "BM2"
+        return None
 
-        # Secondary detection: Check manufacturer data patterns
-        if manufacturer_data:
-            for device_type, patterns in self.DETECTION_PATTERNS.items():
-                for pattern in patterns["manufacturer_data_patterns"]:
-                    # Convert both to bytes for comparison
-                    if isinstance(pattern, str):
-                        pattern_bytes = pattern.encode()
-                    else:
-                        pattern_bytes = pattern
+    def _detect_by_manufacturer_data(
+        self,
+        manufacturer_data: dict | str | bytes,
+    ) -> str | None:
+        """Detect device type by manufacturer data."""
+        if not manufacturer_data:
+            return None
 
+        for device_type, patterns in self.DETECTION_PATTERNS.items():
+            # Check manufacturer IDs first (more reliable)
+            if isinstance(manufacturer_data, dict):
+                for mfg_id in manufacturer_data:
+                    # Pre-check to avoid try-except in loop
+                    if not mfg_id.isdigit():
+                        continue
+                    mfg_id_int = int(mfg_id)
+                    if mfg_id_int in patterns.get("manufacturer_ids", []):
+                        self.logger.info(
+                            "Detected %s by manufacturer ID: %s",
+                            device_type,
+                            mfg_id,
+                        )
+                        return device_type
+
+            # Check manufacturer data patterns
+            for pattern in patterns["manufacturer_data_patterns"]:
+                # Convert pattern to bytes for comparison
+                if isinstance(pattern, str):
+                    pattern_bytes = pattern.encode()
+                else:
+                    pattern_bytes = pattern
+
+                # Handle different manufacturer_data formats
+                if isinstance(manufacturer_data, dict):
+                    # Check each manufacturer data entry
+                    for data in manufacturer_data.values():
+                        data_bytes = data.encode() if isinstance(data, str) else data
+
+                        if pattern_bytes in data_bytes:
+                            self.logger.info(
+                                "Detected %s by manufacturer data pattern: %s",
+                                device_type,
+                                pattern,
+                            )
+                            return device_type
+                else:
+                    # Handle legacy format (bytes or string)
                     if isinstance(manufacturer_data, str):
                         manufacturer_bytes = manufacturer_data.encode()
                     else:
@@ -180,8 +253,10 @@ class DeviceFactory:
                             pattern,
                         )
                         return device_type
+        return None
 
-        # Tertiary detection: Check service UUIDs (least specific)
+    def _detect_by_service_uuids(self, service_uuids: list[str]) -> str | None:
+        """Detect device type by service UUIDs."""
         for device_type, patterns in self.DETECTION_PATTERNS.items():
             for uuid in patterns["service_uuids"]:
                 if uuid in service_uuids:
@@ -191,11 +266,6 @@ class DeviceFactory:
                         uuid,
                     )
                     return device_type
-
-        self.logger.warning(
-            "Could not auto-detect device type from advertisement: %s",
-            advertisement_data,
-        )
         return None
 
     def create_device_from_advertisement(

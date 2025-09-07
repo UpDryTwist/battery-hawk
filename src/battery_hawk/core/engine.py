@@ -23,6 +23,7 @@ from battery_hawk_driver.base.connection import BLEConnectionPool
 from battery_hawk_driver.base.device_factory import DeviceFactory
 from battery_hawk_driver.base.discovery import BLEDiscoveryService
 
+from .auto_config import AutoConfigurationService
 from .registry import DeviceRegistry, VehicleRegistry
 from .state import DeviceStateManager
 from .storage import DataStorage
@@ -53,7 +54,11 @@ class BatteryHawkCore:
         self.connection_pool = BLEConnectionPool(config_manager)
         self.discovery_service = BLEDiscoveryService(config_manager)
         self.device_factory = DeviceFactory(self.connection_pool)
-        self.device_registry = DeviceRegistry(config_manager)
+        self.auto_config_service = AutoConfigurationService(
+            config_manager,
+            self.device_factory,
+        )
+        self.device_registry = DeviceRegistry(config_manager, self.auto_config_service)
         self.vehicle_registry = VehicleRegistry(config_manager)
         self.data_storage = DataStorage(config_manager)
         self.state_manager = DeviceStateManager()

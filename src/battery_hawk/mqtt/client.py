@@ -19,7 +19,7 @@ from battery_hawk_driver.base.protocol import DeviceStatus
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from asyncio_mqtt import Client, MqttError
+from aiomqtt import Client, MqttError
 
 from battery_hawk_driver.base.protocol import BatteryInfo
 
@@ -275,7 +275,8 @@ class MQTTInterface:
             "hostname": broker,
             "port": port,
             "keepalive": self._mqtt_config.get("keepalive", 60),
-            "timeout": self._mqtt_config.get("timeout", 10),
+            # Note: aiomqtt doesn't accept timeout in constructor
+            # Timeout is handled via asyncio.wait_for() in connection logic
         }
 
         # Add authentication if configured
@@ -862,36 +863,35 @@ class MQTTInterface:
             return
 
         try:
-            async with self._client.messages() as messages:
-                async for message in messages:
-                    topic = message.topic.value
-                    payload = (
-                        message.payload.decode("utf-8")
-                        if isinstance(message.payload, bytes)
-                        else str(message.payload)
-                    )
+            async for message in self._client.messages:
+                topic = message.topic.value
+                payload = (
+                    message.payload.decode("utf-8")
+                    if isinstance(message.payload, bytes)
+                    else str(message.payload)
+                )
 
-                    self.logger.debug(
-                        "Received message on topic '%s': %s",
-                        topic,
-                        payload,
-                    )
+                self.logger.debug(
+                    "Received message on topic '%s': %s",
+                    topic,
+                    payload,
+                )
 
-                    # Find and call handler
-                    handler = self._message_handlers.get(topic)
-                    if handler:
-                        try:
-                            handler(topic, payload)
-                        except Exception:
-                            self.logger.exception(
-                                "Error in message handler for topic '%s'",
-                                topic,
-                            )
-                    else:
-                        self.logger.warning(
-                            "No handler registered for topic '%s'",
+                # Find and call handler
+                handler = self._message_handlers.get(topic)
+                if handler:
+                    try:
+                        handler(topic, payload)
+                    except Exception:
+                        self.logger.exception(
+                            "Error in message handler for topic '%s'",
                             topic,
                         )
+                else:
+                    self.logger.warning(
+                        "No handler registered for topic '%s'",
+                        topic,
+                    )
 
         except asyncio.CancelledError:
             self.logger.debug("Message handling task cancelled")

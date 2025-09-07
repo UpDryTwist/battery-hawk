@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from battery_hawk.config.config_manager import ConfigManager
+    from battery_hawk.core.auto_config import AutoConfigurationService
 
 
 class DeviceRegistry:
@@ -23,14 +24,20 @@ class DeviceRegistry:
     Provides thread-safe operations for device management.
     """
 
-    def __init__(self, config_manager: ConfigManager) -> None:
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        auto_config_service: AutoConfigurationService | None = None,
+    ) -> None:
         """
         Initialize DeviceRegistry with configuration manager.
 
         Args:
             config_manager: Configuration manager instance
+            auto_config_service: Optional auto-configuration service
         """
         self.config = config_manager
+        self.auto_config_service = auto_config_service
         self.logger = logging.getLogger("battery_hawk.device_registry")
         self.devices: dict[str, dict[str, Any]] = {}
         self._load_devices()
@@ -75,6 +82,13 @@ class DeviceRegistry:
                 self.logger.info("Registered discovered device: %s", mac_address)
 
         await self._save_devices()
+
+        # Trigger auto-configuration if enabled
+        if self.auto_config_service:
+            await self.auto_config_service.process_discovered_devices(
+                discovered_devices,
+                self,
+            )
 
     async def configure_device(
         self,

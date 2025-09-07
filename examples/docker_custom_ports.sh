@@ -8,19 +8,19 @@ echo "🐳 Battery Hawk - Custom Ports Example"
 echo "======================================"
 
 # Check if Docker Compose is available
-if ! command -v docker &> /dev/null; then
-    echo "❌ Docker is not installed or not in PATH"
-    exit 1
+if ! command -v docker &>/dev/null; then
+	echo "❌ Docker is not installed or not in PATH"
+	exit 1
 fi
 
-if ! docker compose version &> /dev/null; then
-    echo "❌ Docker Compose is not available"
-    exit 1
+if ! docker compose version &>/dev/null; then
+	echo "❌ Docker Compose is not available"
+	exit 1
 fi
 
 # Create custom environment file
 echo "📝 Creating custom environment configuration..."
-cat > .env.custom << EOF
+cat >.env.custom <<EOF
 # Custom port configuration to avoid conflicts
 API_HOST_PORT=5001
 INFLUXDB_HOST_PORT=8087
@@ -60,24 +60,24 @@ sleep 10
 echo "🏥 Checking service health..."
 
 # Check API health
-if curl -f -s http://localhost:5001/api/health > /dev/null; then
-    echo "✅ Battery Hawk API is healthy (port 5001)"
+if curl -f -s http://localhost:5001/api/health >/dev/null; then
+	echo "✅ Battery Hawk API is healthy (port 5001)"
 else
-    echo "❌ Battery Hawk API is not responding (port 5001)"
+	echo "❌ Battery Hawk API is not responding (port 5001)"
 fi
 
 # Check InfluxDB
-if curl -f -s http://localhost:8087/ping > /dev/null; then
-    echo "✅ InfluxDB is healthy (port 8087)"
+if curl -f -s http://localhost:8087/ping >/dev/null; then
+	echo "✅ InfluxDB is healthy (port 8087)"
 else
-    echo "❌ InfluxDB is not responding (port 8087)"
+	echo "❌ InfluxDB is not responding (port 8087)"
 fi
 
 # Check Adminer
-if curl -f -s http://localhost:8081 > /dev/null; then
-    echo "✅ Adminer is healthy (port 8081)"
+if curl -f -s http://localhost:8081 >/dev/null; then
+	echo "✅ Adminer is healthy (port 8081)"
 else
-    echo "❌ Adminer is not responding (port 8081)"
+	echo "❌ Adminer is not responding (port 8081)"
 fi
 
 echo ""

@@ -11,6 +11,7 @@
 ## 🌟 Features
 
 - **🔍 Device Discovery**: Automatic discovery of BLE battery monitors
+- **⚙️ Auto-Configuration**: Intelligent automatic configuration of discovered devices
 - **📊 Real-time Monitoring**: Continuous battery voltage, current, temperature, and state-of-charge monitoring
 - **🚗 Vehicle Management**: Organize devices by vehicle for better fleet management
 - **📈 Data Storage**: Store historical data in InfluxDB with configurable retention policies
@@ -267,11 +268,56 @@ battery-hawk system metrics
 |---------------|-------------|--------------|
 | `service` | Service management | `start`, `stop`, `status`, `restart` |
 | `device` | Device operations | `scan`, `connect`, `add`, `remove`, `list`, `status`, `readings` |
+| `device auto-config` | Auto-configuration | `status`, `enable`, `disable`, `run` |
 | `vehicle` | Vehicle management | `add`, `remove`, `list`, `show`, `associate` |
 | `data` | Data operations | `query`, `export`, `stats`, `cleanup` |
 | `mqtt` | MQTT management | `status`, `publish`, `topics`, `monitor`, `test` |
 | `system` | System monitoring | `health`, `logs`, `metrics`, `diagnose` |
 | `config` | Configuration | `show`, `set`, `save`, `list` |
+
+#### Auto-Configuration
+
+Battery Hawk includes intelligent auto-configuration that automatically sets up discovered devices:
+
+```bash
+# Check auto-configuration status
+battery-hawk device auto-config status
+
+# Enable auto-configuration
+battery-hawk device auto-config enable
+
+# Disable auto-configuration
+battery-hawk device auto-config disable
+
+# Run auto-configuration manually
+battery-hawk device auto-config run
+
+# Preview what would be configured (dry run)
+battery-hawk device auto-config run --dry-run
+```
+
+**Auto-configuration features:**
+- **Automatic Device Detection**: Uses BLE advertisement data to identify device types (BM6, BM2)
+- **Intelligent Naming**: Generates meaningful device names based on configurable templates
+- **Configurable Rules**: Customize auto-configuration behavior per device type
+- **Confidence Scoring**: Only configures devices when detection confidence is high enough
+- **Manual Override**: Can be disabled or run manually as needed
+- **Environment Variable Support**: Control via `BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_ENABLED`
+
+#### Environment Variables
+
+Auto-configuration can be controlled via environment variables:
+
+```bash
+# Disable auto-configuration
+export BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_ENABLED=false
+
+# Set confidence threshold
+export BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_CONFIDENCE_THRESHOLD=0.9
+
+# Set default polling interval (seconds)
+export BATTERYHAWK_SYSTEM_DISCOVERY_AUTO_CONFIGURE_DEFAULT_POLLING_INTERVAL=1800
+```
 
 ### REST API Usage
 

@@ -32,7 +32,30 @@ DEFAULTS: dict[str, dict] = {
             "backup_count": 5,
         },
         "bluetooth": {"max_concurrent_connections": 3, "test_mode": False},
-        "discovery": {"initial_scan": True, "scan_duration": 10},
+        "discovery": {
+            "initial_scan": True,
+            "scan_duration": 10,
+            "auto_configure": {
+                "enabled": True,
+                "confidence_threshold": 0.8,
+                "default_polling_interval": 3600,
+                "auto_assign_names": True,
+                "rules": {
+                    "BM6": {
+                        "auto_configure": True,
+                        "default_name_template": "BM6 Battery Monitor {mac_suffix}",
+                        "polling_interval": 1800,  # 30 minutes for BM6
+                        "priority": 1,
+                    },
+                    "BM2": {
+                        "auto_configure": True,
+                        "default_name_template": "BM2 Battery Monitor {mac_suffix}",
+                        "polling_interval": 3600,  # 1 hour for BM2
+                        "priority": 2,
+                    },
+                },
+            },
+        },
         "influxdb": {
             "enabled": False,
             "host": "localhost",
@@ -110,7 +133,32 @@ SCHEMAS: dict[str, dict] = {
             "version": {"type": "string"},
             "logging": {"type": "object"},
             "bluetooth": {"type": "object"},
-            "discovery": {"type": "object"},
+            "discovery": {
+                "type": "object",
+                "properties": {
+                    "initial_scan": {"type": "boolean"},
+                    "scan_duration": {"type": "integer", "minimum": 1},
+                    "auto_configure": {
+                        "type": "object",
+                        "properties": {
+                            "enabled": {"type": "boolean"},
+                            "confidence_threshold": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                            },
+                            "default_polling_interval": {
+                                "type": "integer",
+                                "minimum": 60,
+                            },
+                            "auto_assign_names": {"type": "boolean"},
+                            "rules": {"type": "object"},
+                        },
+                        "required": ["enabled"],
+                    },
+                },
+                "required": ["initial_scan", "scan_duration"],
+            },
             "influxdb": {"type": "object"},
             "mqtt": {"type": "object"},
             "api": {"type": "object"},
@@ -298,6 +346,7 @@ class ConfigManager:
         Apply BATTERYHAWK_ environment variable overrides to configs.
 
         Format: BATTERYHAWK_SECTION_KEY1_KEY2=VALUE (e.g., BATTERYHAWK_SYSTEM_LOGGING_LEVEL=DEBUG).
+        Special handling for auto_configure keys.
         """
         for env_key, value in os.environ.items():
             if not env_key.startswith("BATTERYHAWK_"):
@@ -307,6 +356,25 @@ class ConfigManager:
                 parts = env_key[12:].lower().split("_")
                 section = parts[0]
                 keys = parts[1:]
+
+                # Special handling for auto_configure keys
+                # Convert AUTO_CONFIGURE_* to auto_configure.*
+                min_auto_configure_parts = 3
+                min_compound_key_parts = 2
+                if (
+                    len(keys) >= min_auto_configure_parts
+                    and keys[1] == "auto"
+                    and keys[2] == "configure"
+                ):
+                    # Handle compound keys like CONFIDENCE_THRESHOLD -> confidence_threshold
+                    remaining_keys = keys[3:]
+                    if len(remaining_keys) >= min_compound_key_parts:
+                        # Join remaining keys with underscores for compound keys
+                        compound_key = "_".join(remaining_keys)
+                        keys = [keys[0], "auto_configure", compound_key]
+                    else:
+                        keys = [keys[0], "auto_configure", *remaining_keys]
+
                 if section not in self.configs:
                     continue
                 d = self.configs[section]

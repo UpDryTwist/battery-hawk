@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import requests
+from influxdb import InfluxDBClient as InfluxDBClient1x
 from influxdb_client.client.influxdb_client import InfluxDBClient
 from influxdb_client.client.write_api import ASYNCHRONOUS
 from influxdb_client.domain.write_precision import WritePrecision
@@ -129,8 +131,10 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             config_manager: Configuration manager instance
         """
         self.client: InfluxDBClient | None = None
+        self.client_1x: InfluxDBClient1x | None = None
         self.write_api: Any | None = None
         self.query_api: Any | None = None
+        self._influxdb_version: str | None = None
         self._connection_lock = asyncio.Lock()
         self._connection_start_time: float | None = None
 
@@ -341,17 +345,8 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 retry_msg = " (retry)" if is_retry else ""
                 self.logger.info("Connecting to InfluxDB at %s%s", url, retry_msg)
 
-                # Initialize InfluxDB client with timeout
-                self.client = InfluxDBClient(
-                    url=url,
-                    username=config["username"] if config["username"] else None,
-                    password=config["password"] if config["password"] else None,
-                    timeout=config["timeout"],
-                )
-
-                # Initialize APIs
-                self.write_api = self.client.write_api(write_options=ASYNCHRONOUS)
-                self.query_api = self.client.query_api()
+                # Detect InfluxDB version and initialize appropriate client
+                await self._detect_and_initialize_client(config, url)
 
                 # Test connection with timeout
                 await asyncio.wait_for(
@@ -466,14 +461,93 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         except Exception:
             self.logger.exception("Error during scheduled retry")
 
+    def _ping_influxdb(self, url: str) -> requests.Response:
+        """Ping InfluxDB server to detect version."""
+        return requests.get(f"{url}/ping", timeout=5)
+
+    async def _detect_and_initialize_client(
+        self,
+        config: dict[str, Any],
+        url: str,
+    ) -> None:
+        """
+        Detect InfluxDB version and initialize the appropriate client.
+
+        Args:
+            config: InfluxDB configuration
+            url: Connection URL
+        """
+        try:
+            # Try to detect InfluxDB version by checking the ping endpoint
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, self._ping_influxdb, url)
+            version_header = response.headers.get("X-Influxdb-Version", "")
+
+            if version_header.startswith("1."):
+                self._influxdb_version = "1.x"
+                self.logger.info("Detected InfluxDB 1.x (version: %s)", version_header)
+
+                # Initialize InfluxDB 1.x client
+                username = config["username"] if config["username"] else ""
+                password = config["password"] if config["password"] else ""
+                self.client_1x = InfluxDBClient1x(
+                    host=config["host"],
+                    port=config["port"],
+                    username=username,
+                    password=password,
+                    database=config["database"],
+                    timeout=config["timeout"] / 1000,  # Convert to seconds
+                )
+
+            else:
+                self._influxdb_version = "2.x"
+                self.logger.info("Detected InfluxDB 2.x (version: %s)", version_header)
+
+                # Initialize InfluxDB 2.x client
+                self.client = InfluxDBClient(
+                    url=url,
+                    username=config["username"] if config["username"] else None,
+                    password=config["password"] if config["password"] else None,
+                    timeout=config["timeout"],
+                )
+
+                # Initialize APIs for 2.x
+                self.write_api = self.client.write_api(write_options=ASYNCHRONOUS)
+                self.query_api = self.client.query_api()
+
+        except (requests.RequestException, OSError, ValueError) as e:
+            self.logger.warning(
+                "Failed to detect InfluxDB version: %s. Defaulting to 1.x",
+                e,
+            )
+            self._influxdb_version = "1.x"
+
+            # Default to InfluxDB 1.x client
+            username = config["username"] if config["username"] else ""
+            password = config["password"] if config["password"] else ""
+            self.client_1x = InfluxDBClient1x(
+                host=config["host"],
+                port=config["port"],
+                username=username,
+                password=password,
+                database=config["database"],
+                timeout=config["timeout"] / 1000,  # Convert to seconds
+            )
+
     async def _test_connection(self) -> None:
         """Test the InfluxDB connection by pinging the server."""
-        if not self.client:
-            raise ConnectionError("InfluxDB client not initialized")
-
-        # Run ping in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self.client.ping)
+        if self._influxdb_version == "1.x":
+            if not self.client_1x:
+                raise ConnectionError("InfluxDB 1.x client not initialized")
+            # Run ping in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.client_1x.ping)
+        else:
+            if not self.client:
+                raise ConnectionError("InfluxDB 2.x client not initialized")
+            # Run ping in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self.client.ping)
 
     async def _ensure_database_exists(self, database_name: str) -> None:
         """
@@ -482,24 +556,30 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         Args:
             database_name: Name of the database to create
         """
-        if not self.client:
-            raise ConnectionError("InfluxDB client not initialized")
-
         try:
-            # For InfluxDB 1.x, we need to create the database
-            # This is a no-op for InfluxDB 2.x which uses buckets
-            if self.query_api:
-                loop = asyncio.get_event_loop()
+            if self._influxdb_version == "1.x":
+                if not self.client_1x:
+                    raise ConnectionError("InfluxDB 1.x client not initialized")
 
-                # Use query API to create database
-                create_db_query = f'CREATE DATABASE "{database_name}"'
-                await loop.run_in_executor(None, self.query_api.query, create_db_query)
+                # For InfluxDB 1.x, create the database using the 1.x client
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    self.client_1x.create_database,
+                    database_name,
+                )
                 self.logger.info(
                     "Database '%s' created or already exists",
                     database_name,
                 )
+            else:
+                # For InfluxDB 2.x, this is a no-op as it uses buckets
+                self.logger.info(
+                    "InfluxDB 2.x uses buckets, skipping database creation",
+                )
+
         except (ConnectionError, OSError, ValueError) as e:
-            # Database might already exist or we might be using InfluxDB 2.x
+            # Database might already exist
             self.logger.debug("Database creation result: %s", e)
 
     async def _cleanup_connection(self) -> None:
@@ -511,6 +591,9 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             if self.client:
                 self.client.close()
                 self.client = None
+            if self.client_1x:
+                self.client_1x.close()
+                self.client_1x = None
             self.query_api = None
             self.connected = False
         except Exception:
@@ -610,9 +693,13 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         Args:
             database_name: Name of the database to setup policies for
         """
-        if not self.client or not self.query_api:
+        if self._influxdb_version == "2.x":
+            self.logger.info("InfluxDB 2.x uses bucket retention policies, skipping")
+            return
+
+        if not self.client_1x:
             self.logger.warning(
-                "Cannot setup retention policies: client not initialized",
+                "Cannot setup retention policies: InfluxDB 1.x client not initialized",
             )
             return
 
@@ -647,7 +734,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             database_name: Name of the database
             policy_config: Retention policy configuration
         """
-        if not self.query_api:
+        if not self.client_1x:
             return
 
         try:
@@ -657,7 +744,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             shard_duration = policy_config.get("shard_duration", "1d")
             is_default = policy_config.get("default", False)
 
-            # Build CREATE RETENTION POLICY query
+            # Build CREATE RETENTION POLICY query for InfluxDB 1.x
             query_parts = [
                 f'CREATE RETENTION POLICY "{policy_name}"',
                 f'ON "{database_name}"',
@@ -673,9 +760,9 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             self.logger.debug("Creating retention policy: %s", query)
 
-            # Execute query asynchronously
+            # Execute query asynchronously using InfluxDB 1.x client
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.query_api.query, query)
+            await loop.run_in_executor(None, self.client_1x.query, query)
 
             self.logger.info(
                 "Created retention policy '%s' (duration: %s, replication: %d, default: %s)",
@@ -765,7 +852,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         Returns:
             List of retention policy information
         """
-        if not self.connected or not self.query_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.query_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             self.logger.warning(
                 "Storage not connected, cannot retrieve retention policies",
             )
@@ -781,12 +872,37 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             # Execute query asynchronously
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self.query_api.query, query)
+            if self._influxdb_version == "1.x":
+                if self.client_1x is None:
+                    raise ConnectionError("InfluxDB 1.x client not initialized")
+                result = await loop.run_in_executor(None, self.client_1x.query, query)
+            else:
+                if self.query_api is None:
+                    raise ConnectionError("InfluxDB 2.x query API not initialized")
+                result = await loop.run_in_executor(None, self.query_api.query, query)
 
             # Convert result to list of dictionaries
             policies = []
             if result:
-                policies.extend(dict(point) for point in result.get_points())
+                # Handle different result types from InfluxDB versions
+                if hasattr(result, "get_points"):
+                    policies.extend(dict(point) for point in result.get_points())  # type: ignore[attr-defined]
+                elif hasattr(result, "__iter__"):
+                    # For InfluxDB 2.x results that might be iterable
+                    try:
+                        for item in result:  # type: ignore[attr-defined]
+                            if hasattr(item, "get_points"):
+                                policies.extend(
+                                    dict(point)
+                                    for point in item.get_points()  # type: ignore[attr-defined]
+                                )
+                            else:
+                                policies.append(
+                                    dict(item) if hasattr(item, "__dict__") else item,  # type: ignore[arg-type]
+                                )
+                    except (TypeError, AttributeError):
+                        # Fallback for unexpected result types
+                        pass
 
             self.logger.debug(
                 "Retrieved %d retention policies for database %s",
@@ -813,7 +929,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         Returns:
             True if policy was dropped successfully
         """
-        if not self.connected or not self.query_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.query_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             self.logger.warning("Storage not connected, cannot drop retention policy")
             return False
 
@@ -824,7 +944,14 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             # Execute query asynchronously
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.query_api.query, query)
+            if self._influxdb_version == "1.x":
+                if self.client_1x is None:
+                    raise ConnectionError("InfluxDB 1.x client not initialized")
+                await loop.run_in_executor(None, self.client_1x.query, query)
+            else:
+                if self.query_api is None:
+                    raise ConnectionError("InfluxDB 2.x query API not initialized")
+                await loop.run_in_executor(None, self.query_api.query, query)
 
             self.logger.info(
                 "Dropped retention policy '%s' from database '%s'",
@@ -941,7 +1068,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         self.metrics.total_writes += 1
 
         # If not connected, buffer the reading
-        if not self.connected or not self.write_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.write_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             return await self._buffer_reading(
                 device_id,
                 vehicle_id,
@@ -996,7 +1127,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         """
         start_time = time.time()
 
-        if not self.connected or not self.write_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.write_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             return False
 
         try:
@@ -1014,33 +1149,66 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             influx_config = self._get_influx_config()
             database = influx_config["database"]
 
-            # Create data point for InfluxDB
-            point_data = {
-                "measurement": "battery_reading",
-                "tags": {
-                    "device_id": device_id,
-                    "vehicle_id": vehicle_id,
-                    "device_type": device_type,
-                    "device_name": device_config.get("name", "Unknown"),
-                    "vehicle_name": vehicle_config.get("name", "Unknown"),
-                },
-                "fields": reading,
-                "time": datetime.now(timezone.utc),
-            }
+            if self._influxdb_version == "1.x":
+                # Use InfluxDB 1.x format
+                point_data = {
+                    "measurement": "battery_reading",
+                    "tags": {
+                        "device_id": device_id,
+                        "vehicle_id": vehicle_id,
+                        "device_type": device_type,
+                        "device_name": device_config.get("name", "Unknown"),
+                        "vehicle_name": vehicle_config.get("name", "Unknown"),
+                    },
+                    "fields": reading,
+                    "time": datetime.now(timezone.utc),
+                }
 
-            # Write data point asynchronously with timeout
-            loop = asyncio.get_event_loop()
-            await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    self.write_api.write,
-                    database,
-                    retention_policy,  # retention policy
-                    point_data,
-                    WritePrecision.S,  # second precision
-                ),
-                timeout=self._error_recovery_config.connection_timeout_seconds,
-            )
+                # Write data point using InfluxDB 1.x client
+                if not self.client_1x:
+                    return False
+                loop = asyncio.get_event_loop()
+                await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        self.client_1x.write_points,
+                        [point_data],
+                        "s",  # second precision
+                        database,
+                        retention_policy,
+                    ),
+                    timeout=self._error_recovery_config.connection_timeout_seconds,
+                )
+            else:
+                # Use InfluxDB 2.x format
+                point_data = {
+                    "measurement": "battery_reading",
+                    "tags": {
+                        "device_id": device_id,
+                        "vehicle_id": vehicle_id,
+                        "device_type": device_type,
+                        "device_name": device_config.get("name", "Unknown"),
+                        "vehicle_name": vehicle_config.get("name", "Unknown"),
+                    },
+                    "fields": reading,
+                    "time": datetime.now(timezone.utc),
+                }
+
+                # Write data point using InfluxDB 2.x client
+                if not self.write_api:
+                    return False
+                loop = asyncio.get_event_loop()
+                await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        self.write_api.write,
+                        database,
+                        retention_policy,  # retention policy
+                        point_data,
+                        WritePrecision.S,  # second precision
+                    ),
+                    timeout=self._error_recovery_config.connection_timeout_seconds,
+                )
 
             # Update metrics
             write_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -1177,7 +1345,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         start_time = time.time()
         self.metrics.total_reads += 1
 
-        if not self.connected or not self.query_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.query_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             self.logger.warning("Storage not connected, cannot retrieve readings")
             self.metrics.failed_reads += 1
             return []
@@ -1209,17 +1381,47 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             # Execute query asynchronously
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self.query_api.query,
-                query,
-                database,
-            )
+            if self._influxdb_version == "1.x":
+                if self.client_1x is None:
+                    raise ConnectionError("InfluxDB 1.x client not initialized")
+                result = await loop.run_in_executor(
+                    None,
+                    self.client_1x.query,
+                    query,
+                    database,
+                )
+            else:
+                if self.query_api is None:
+                    raise ConnectionError("InfluxDB 2.x query API not initialized")
+                result = await loop.run_in_executor(
+                    None,
+                    self.query_api.query,
+                    query,
+                    database,
+                )
 
             # Convert result to list of dictionaries
             readings = []
             if result:
-                readings.extend(dict(point) for point in result.get_points())
+                # Handle different result types from InfluxDB versions
+                if hasattr(result, "get_points"):
+                    readings.extend(dict(point) for point in result.get_points())  # type: ignore[attr-defined]
+                elif hasattr(result, "__iter__"):
+                    # For InfluxDB 2.x results that might be iterable
+                    try:
+                        for item in result:  # type: ignore[attr-defined]
+                            if hasattr(item, "get_points"):
+                                readings.extend(
+                                    dict(point)
+                                    for point in item.get_points()  # type: ignore[attr-defined]
+                                )
+                            else:
+                                readings.append(
+                                    dict(item) if hasattr(item, "__dict__") else item,  # type: ignore[arg-type]
+                                )
+                    except (TypeError, AttributeError):
+                        # Fallback for unexpected result types
+                        pass
 
             # Update metrics
             read_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -1259,7 +1461,11 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         Returns:
             Summary statistics dictionary
         """
-        if not self.connected or not self.query_api:
+        if (
+            not self.connected
+            or (self._influxdb_version == "2.x" and not self.query_api)
+            or (self._influxdb_version == "1.x" and not self.client_1x)
+        ):
             self.logger.warning("Storage not connected, cannot retrieve summary")
             return self._empty_summary(vehicle_id, hours)
 
@@ -1298,16 +1504,44 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             # Execute query asynchronously
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self.query_api.query,
-                query,
-                database,
-            )
+            if self._influxdb_version == "1.x":
+                if self.client_1x is None:
+                    raise ConnectionError("InfluxDB 1.x client not initialized")
+                result = await loop.run_in_executor(
+                    None,
+                    self.client_1x.query,
+                    query,
+                    database,
+                )
+            else:
+                if self.query_api is None:
+                    raise ConnectionError("InfluxDB 2.x query API not initialized")
+                result = await loop.run_in_executor(
+                    None,
+                    self.query_api.query,
+                    query,
+                    database,
+                )
 
             # Process result
             if result:
-                points = list(result.get_points())
+                # Handle different result types from InfluxDB versions
+                points = []
+                if hasattr(result, "get_points"):
+                    points = list(result.get_points())  # type: ignore[attr-defined]
+                elif hasattr(result, "__iter__"):
+                    # For InfluxDB 2.x results that might be iterable
+                    try:
+                        for item in result:  # type: ignore[attr-defined]
+                            if hasattr(item, "get_points"):
+                                points.extend(list(item.get_points()))  # type: ignore[attr-defined]
+                            else:
+                                points.append(
+                                    dict(item) if hasattr(item, "__dict__") else item,  # type: ignore[arg-type]
+                                )
+                    except (TypeError, AttributeError):
+                        # Fallback for unexpected result types
+                        pass
                 if points:
                     point = points[0]
                     return {
@@ -1364,12 +1598,21 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 return await self.connect()
 
             # If still not connected after connect attempt, fail
-            if not self.client:
+            if (self._influxdb_version == "1.x" and not self.client_1x) or (
+                self._influxdb_version == "2.x" and not self.client
+            ):
                 return False
 
             # Ping the InfluxDB server
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.client.ping)
+            if self._influxdb_version == "1.x":
+                if not self.client_1x:
+                    return False
+                await loop.run_in_executor(None, self.client_1x.ping)
+            else:
+                if not self.client:
+                    return False
+                await loop.run_in_executor(None, self.client.ping)
 
             # Update connection uptime
             if self._connection_start_time:
