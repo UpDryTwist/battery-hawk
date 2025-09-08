@@ -16,6 +16,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import requests
@@ -1494,9 +1495,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                     raise ConnectionError("InfluxDB 1.x client not initialized")
                 result = await loop.run_in_executor(
                     None,
-                    self.client_1x.query,
-                    query,
-                    database,
+                    partial(self.client_1x.query, query, database=database),
                 )
             else:
                 if self.query_api is None:
@@ -1617,9 +1616,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                     raise ConnectionError("InfluxDB 1.x client not initialized")
                 result = await loop.run_in_executor(
                     None,
-                    self.client_1x.query,
-                    query,
-                    database,
+                    partial(self.client_1x.query, query, database=database),
                 )
             else:
                 if self.query_api is None:
