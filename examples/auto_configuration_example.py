@@ -39,12 +39,12 @@ async def main() -> int:
         config_dir = Path(__file__).parent.parent / "local-instance" / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_manager = ConfigManager(str(config_dir))
-        
+
         # Enable auto-configuration
         system_config = config_manager.get_config("system")
         system_config["discovery"]["auto_configure"]["enabled"] = True
         config_manager.save_config("system")
-        
+
         logger.info("Auto-configuration enabled")
 
         # Initialize components
@@ -57,7 +57,10 @@ async def main() -> int:
         # Check auto-configuration status
         logger.info("Auto-configuration status:")
         logger.info("  Enabled: %s", auto_config_service.is_enabled())
-        logger.info("  Confidence threshold: %.2f", auto_config_service.get_confidence_threshold())
+        logger.info(
+            "  Confidence threshold: %.2f",
+            auto_config_service.get_confidence_threshold(),
+        )
 
         # Simulate discovered devices
         sample_devices = {
@@ -96,22 +99,28 @@ async def main() -> int:
         configured_devices = device_registry.get_configured_devices()
         logger.info("Configured devices after auto-configuration:")
         for device in configured_devices:
-            logger.info("  %s: %s (%s) - %ds polling",
-                       device.get("mac_address"),
-                       device.get("friendly_name"),
-                       device.get("device_type"),
-                       device.get("polling_interval"))
+            logger.info(
+                "  %s: %s (%s) - %ds polling",
+                device.get("mac_address"),
+                device.get("friendly_name"),
+                device.get("device_type"),
+                device.get("polling_interval"),
+            )
 
         # Demonstrate rules engine
         logger.info("\nDemonstrating rules engine:")
         rules_engine = AutoConfigurationRulesEngine(config_manager)
-        
+
         for mac_address, device_info in sample_devices.items():
             advertisement_data = device_info.get("advertisement_data", {})
             detected_type = device_factory.auto_detect_device_type(advertisement_data)
-            
-            result = rules_engine.evaluate_device(mac_address, device_info, detected_type)
-            
+
+            result = rules_engine.evaluate_device(
+                mac_address,
+                device_info,
+                detected_type,
+            )
+
             logger.info("Device %s:", mac_address)
             logger.info("  Detected type: %s", detected_type)
             logger.info("  Should configure: %s", result.should_configure)
@@ -123,7 +132,7 @@ async def main() -> int:
 
         # Demonstrate manual auto-configuration run
         logger.info("\nRunning manual auto-configuration (dry run):")
-        
+
         # Add another device that wasn't auto-configured
         new_device = {
             "50:54:7B:81:33:41": {
@@ -138,15 +147,16 @@ async def main() -> int:
                 },
             },
         }
-        
+
         # Register without auto-configuration (simulate manual discovery)
         device_registry.devices.update(new_device)
-        
+
         # Process for auto-configuration
         results = await auto_config_service.process_discovered_devices(
-            new_device, device_registry
+            new_device,
+            device_registry,
         )
-        
+
         logger.info("Auto-configuration results:")
         for mac_address, success in results.items():
             logger.info("  %s: %s", mac_address, "Configured" if success else "Skipped")
