@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 @dataclass
 class DeviceConfigurationResult:
     """Result of device configuration rule evaluation."""
-    
+
     should_configure: bool
     device_type: str | None = None
     friendly_name: str | None = None
@@ -81,9 +81,9 @@ class DefaultDeviceTypeRule(ConfigurationRule):
         discovery_config = self.config_manager.get_config("system").get("discovery", {})
         auto_config = discovery_config.get("auto_configure", {})
         rules = auto_config.get("rules", {})
-        
+
         device_rules = rules.get(detected_type, {})
-        
+
         if not device_rules.get("auto_configure", True):
             return DeviceConfigurationResult(should_configure=False)
 
@@ -93,7 +93,7 @@ class DefaultDeviceTypeRule(ConfigurationRule):
             f"{detected_type} Device {{mac_suffix}}",
         )
         mac_suffix = mac_address.replace(":", "")[-4:].upper()
-        
+
         try:
             friendly_name = name_template.format(
                 mac_address=mac_address,
@@ -130,26 +130,28 @@ class LocationBasedRule(ConfigurationRule):
 
     def evaluate(
         self,
-        mac_address: str,
+        mac_address: str,  # noqa: ARG002
         device_info: dict[str, Any],
         detected_type: str | None,
     ) -> DeviceConfigurationResult:
         """Evaluate based on device location patterns."""
         # This is a placeholder for location-based rules
         # Could be extended to use RSSI, known locations, etc.
-        
+
+        # Define RSSI threshold for close devices
+        close_device_rssi_threshold = -40
+
         rssi = device_info.get("rssi")
-        if rssi is not None and rssi > -40:
+        if rssi is not None and rssi > close_device_rssi_threshold and detected_type:
             # Very close device - might be a primary battery
-            if detected_type:
-                return DeviceConfigurationResult(
-                    should_configure=True,
-                    device_type=detected_type,
-                    friendly_name=f"Primary {detected_type}",
-                    polling_interval=1800,  # More frequent polling for primary
-                    confidence=0.9,
-                    rule_name=self.name,
-                )
+            return DeviceConfigurationResult(
+                should_configure=True,
+                device_type=detected_type,
+                friendly_name=f"Primary {detected_type}",
+                polling_interval=1800,  # More frequent polling for primary
+                confidence=0.9,
+                rule_name=self.name,
+            )
 
         return DeviceConfigurationResult(should_configure=False)
 
@@ -164,16 +166,16 @@ class VehicleAssignmentRule(ConfigurationRule):
 
     def evaluate(
         self,
-        mac_address: str,
+        mac_address: str,  # noqa: ARG002
         device_info: dict[str, Any],
         detected_type: str | None,
     ) -> DeviceConfigurationResult:
         """Evaluate for automatic vehicle assignment."""
         # This is a placeholder for vehicle assignment logic
         # Could be extended to use naming patterns, location, etc.
-        
+
         device_name = device_info.get("name", "").lower()
-        
+
         # Look for vehicle indicators in device name
         vehicle_patterns = {
             "car": r"car|auto|vehicle",
@@ -181,7 +183,7 @@ class VehicleAssignmentRule(ConfigurationRule):
             "boat": r"boat|marine|yacht",
             "rv": r"rv|motorhome|camper",
         }
-        
+
         for vehicle_type, pattern in vehicle_patterns.items():
             if re.search(pattern, device_name):
                 return DeviceConfigurationResult(
@@ -208,7 +210,7 @@ class AutoConfigurationRulesEngine:
         self.config_manager = config_manager
         self.logger = logging.getLogger(__name__)
         self.rules: list[ConfigurationRule] = []
-        
+
         # Initialize default rules
         self._initialize_default_rules()
 
@@ -219,7 +221,7 @@ class AutoConfigurationRulesEngine:
             LocationBasedRule(self.config_manager),
             VehicleAssignmentRule(self.config_manager),
         ]
-        
+
         # Sort by priority (highest first)
         self.rules.sort(key=lambda r: r.priority, reverse=True)
 
@@ -268,7 +270,7 @@ class AutoConfigurationRulesEngine:
             Best configuration result from all rules
         """
         results = []
-        
+
         for rule in self.rules:
             try:
                 result = rule.evaluate(mac_address, device_info, detected_type)
@@ -280,12 +282,11 @@ class AutoConfigurationRulesEngine:
                         mac_address,
                         result.confidence,
                     )
-            except Exception as e:
+            except Exception:  # noqa: PERF203
                 self.logger.exception(
-                    "Error evaluating rule '%s' for device %s: %s",
+                    "Error evaluating rule '%s' for device %s",
                     rule.name,
                     mac_address,
-                    e,
                 )
 
         if not results:
@@ -293,17 +294,17 @@ class AutoConfigurationRulesEngine:
 
         # Return the result with highest confidence
         best_result = max(results, key=lambda r: r.confidence)
-        
+
         # Merge results if multiple rules apply
         merged_result = self._merge_results(results, best_result)
-        
+
         self.logger.info(
             "Best configuration for %s: rule='%s', confidence=%.2f",
             mac_address,
             merged_result.rule_name,
             merged_result.confidence,
         )
-        
+
         return merged_result
 
     def _merge_results(
@@ -336,15 +337,18 @@ class AutoConfigurationRulesEngine:
         for result in results:
             if result == primary_result:
                 continue
-                
+
             # Vehicle assignment from specialized rules takes precedence
             if result.vehicle_id and not merged.vehicle_id:
                 merged.vehicle_id = result.vehicle_id
-                
+
             # Use more specific polling intervals
-            if (result.polling_interval and 
-                result.polling_interval != merged.polling_interval and
-                result.confidence > 0.7):
+            if (
+                result.polling_interval
+                and result.polling_interval != merged.polling_interval
+                and result.confidence
+                > 0.7  # High confidence threshold  # noqa: PLR2004
+            ):
                 merged.polling_interval = result.polling_interval
 
         return merged

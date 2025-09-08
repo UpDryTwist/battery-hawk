@@ -18,6 +18,18 @@ except ImportError:
     BLEDevice = None
     AdvertisementData = None
 
+# Import the BLE scan coordination semaphore
+try:
+    from .connection import get_ble_scan_semaphore
+except ImportError:
+    import asyncio
+
+    # Fallback if connection module is not available
+    def get_ble_scan_semaphore() -> asyncio.Semaphore:
+        """Get or create a fallback BLE scan coordination semaphore."""
+        return asyncio.Semaphore(1)
+
+
 # Constants
 TUPLE_SIZE_DEVICE_AND_ADV = 2
 
@@ -104,7 +116,12 @@ class BLEDiscoveryService:
         if BleakScanner is None:
             self.logger.error("Bleak library is not installed.")
             return {}
-        devices = await BleakScanner.discover(timeout=duration, return_adv=True)
+
+        # Use semaphore to coordinate BLE scanning operations
+        scan_semaphore = get_ble_scan_semaphore()
+        async with scan_semaphore:
+            self.logger.debug("Acquired BLE scan semaphore for device discovery")
+            devices = await BleakScanner.discover(timeout=duration, return_adv=True)
 
         # Handle the return format properly - it should be a list of (device, advertisement_data) tuples
         for device, advertisement_data in devices.values():
@@ -159,10 +176,17 @@ class BLEDiscoveryService:
             if BleakScanner is None:
                 self.logger.error("Bleak library is not installed.")
                 return {}
-            devices = await BleakScanner.discover(
-                timeout=short_timeout,
-                return_adv=True,
-            )
+
+            # Use semaphore to coordinate BLE scanning operations
+            scan_semaphore = get_ble_scan_semaphore()
+            async with scan_semaphore:
+                self.logger.debug(
+                    "Acquired BLE scan semaphore for short discovery scan",
+                )
+                devices = await BleakScanner.discover(
+                    timeout=short_timeout,
+                    return_adv=True,
+                )
 
             # Check if any new devices were found
             new_devices_found = False

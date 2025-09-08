@@ -9,6 +9,7 @@ the abstract base class and concrete implementations.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from collections import deque
@@ -184,8 +185,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 # Initialize error recovery configuration
                 self._initialize_error_recovery()
 
-                # Start background tasks
-                self._start_background_tasks()
+                # Background tasks will be started after a successful connect()
             else:
                 self.logger.info("InfluxDB storage disabled")
         except Exception:
@@ -263,6 +263,9 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             Dictionary containing InfluxDB connection parameters
         """
         influx_config = self.config.get_config("system").get("influxdb", {})
+        # Be defensive: tests may pass MagicMocks; coerce to dict to avoid surprises
+        if not isinstance(influx_config, dict):
+            influx_config = {}
 
         # Set defaults for missing configuration
         defaults = {
@@ -372,6 +375,19 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                     else "Successfully connected to InfluxDB"
                 )
                 self.logger.info(success_msg)
+
+                # Start background tasks lazily after a successful connection
+                # Avoid starting them during __init__ so unit tests that don't
+                # establish connections (or pass MagicMocks) don't spawn tasks.
+                try:
+                    # Only start if no active tasks
+                    if not any(not t.done() for t in self._background_tasks):
+                        self._shutdown_event.clear()
+                        self._start_background_tasks()
+                except Exception:
+                    self.logger.exception(
+                        "Failed to start background tasks after connect",
+                    )
 
                 # Flush buffered readings on successful connection
                 if is_retry and self._reading_buffer:
@@ -1151,6 +1167,9 @@ class InfluxDBStorageBackend(BaseStorageBackend):
 
             if self._influxdb_version == "1.x":
                 # Use InfluxDB 1.x format
+                # Filter out problematic field values for InfluxDB line protocol
+                filtered_fields = self._filter_influxdb_fields(reading)
+
                 point_data = {
                     "measurement": "battery_reading",
                     "tags": {
@@ -1160,7 +1179,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                         "device_name": device_config.get("name", "Unknown"),
                         "vehicle_name": vehicle_config.get("name", "Unknown"),
                     },
-                    "fields": reading,
+                    "fields": filtered_fields,
                     "time": datetime.now(timezone.utc),
                 }
 
@@ -1181,6 +1200,9 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 )
             else:
                 # Use InfluxDB 2.x format
+                # Filter out problematic field values for InfluxDB line protocol
+                filtered_fields = self._filter_influxdb_fields(reading)
+
                 point_data = {
                     "measurement": "battery_reading",
                     "tags": {
@@ -1190,7 +1212,7 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                         "device_name": device_config.get("name", "Unknown"),
                         "vehicle_name": vehicle_config.get("name", "Unknown"),
                     },
-                    "fields": reading,
+                    "fields": filtered_fields,
                     "time": datetime.now(timezone.utc),
                 }
 
@@ -1248,6 +1270,92 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             return False
         else:
             return True
+
+    def _filter_influxdb_fields(self, reading: dict[str, Any]) -> dict[str, Any]:
+        """
+        Filter out problematic field values for InfluxDB line protocol.
+
+        InfluxDB line protocol has specific requirements for field values:
+        - Empty dictionaries/lists cause parsing errors
+        - Complex nested structures should be serialized
+        - None values should be excluded
+
+        Args:
+            reading: Raw reading data dictionary
+
+        Returns:
+            Filtered dictionary safe for InfluxDB storage
+        """
+        filtered = {}
+
+        for key, value in reading.items():
+            # Skip None values
+            if value is None:
+                continue
+
+            # Handle empty dictionaries (like empty 'extra' field)
+            if isinstance(value, dict):
+                if not value:  # Empty dictionary
+                    continue
+                # Convert non-empty dictionaries to JSON string
+                try:
+                    filtered[key] = json.dumps(value)
+                except (TypeError, ValueError):
+                    # If serialization fails, skip the field
+                    self.logger.warning(
+                        "Skipping field '%s' - cannot serialize to JSON: %s",
+                        key,
+                        value,
+                    )
+                    continue
+
+            # Handle empty lists
+            elif isinstance(value, (list, tuple)):
+                if not value:  # Empty list/tuple
+                    continue
+                # Convert non-empty lists to JSON string
+                try:
+                    filtered[key] = json.dumps(value)
+                except (TypeError, ValueError):
+                    # If serialization fails, skip the field
+                    self.logger.warning(
+                        "Skipping field '%s' - cannot serialize to JSON: %s",
+                        key,
+                        value,
+                    )
+                    continue
+
+            # Handle numeric values (int, float)
+            elif isinstance(value, (int, float)):
+                # Ensure finite values only
+                if not (
+                    isinstance(value, float)
+                    and (value == float("inf") or value == float("-inf"))
+                ):
+                    filtered[key] = value
+                else:
+                    self.logger.warning(
+                        "Skipping field '%s' - invalid numeric value: %s",
+                        key,
+                        value,
+                    )
+
+            # Handle string and boolean values (these are safe)
+            elif isinstance(value, (str, bool)):
+                filtered[key] = value
+
+            # For other types, try to convert to string
+            else:
+                try:
+                    filtered[key] = str(value)
+                except (TypeError, ValueError):
+                    self.logger.warning(
+                        "Skipping field '%s' - cannot convert to string: %s",
+                        key,
+                        value,
+                    )
+
+        return filtered
 
     async def _buffer_reading(
         self,

@@ -22,6 +22,19 @@ except ImportError:
 
 from .state import ConnectionState, ConnectionStateManager
 
+# Global semaphore to coordinate BLE scanning operations
+# This prevents multiple scanning operations from running simultaneously
+# which causes "Operation already in progress" errors in BlueZ
+_ble_scan_semaphore: asyncio.Semaphore | None = None
+
+
+def get_ble_scan_semaphore() -> asyncio.Semaphore:
+    """Get or create the global BLE scan coordination semaphore."""
+    global _ble_scan_semaphore  # noqa: PLW0603
+    if _ble_scan_semaphore is None:
+        _ble_scan_semaphore = asyncio.Semaphore(1)  # Only one scan at a time
+    return _ble_scan_semaphore
+
 
 class BLEConnectionError(Exception):
     """Exception raised when BLE connection operations fail."""
@@ -301,8 +314,16 @@ class BLEConnectionPool:
                     )
                 client = BleakClient(device_address, timeout=self.connection_timeout)
 
-            # Attempt to connect
-            await client.connect()
+            # Attempt to connect using semaphore to coordinate BLE scanning
+            # This prevents "Operation already in progress" errors when multiple
+            # BLE operations try to scan simultaneously
+            scan_semaphore = get_ble_scan_semaphore()
+            async with scan_semaphore:
+                self.logger.debug(
+                    "Acquired BLE scan semaphore for connection to %s",
+                    device_address,
+                )
+                await client.connect()
 
             # Verify connection was successful
             if not client.is_connected:

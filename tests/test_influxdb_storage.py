@@ -5,6 +5,7 @@ This module tests the DataStorage class with InfluxDB backend functionality
 including connection handling, data writing, and querying.
 """
 
+import json
 import time
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -122,6 +123,9 @@ class TestDataStorageInfluxDB:
         mock_influx_client_1x.assert_called_once()
         mock_client_instance.ping.assert_called_once()
 
+        # Cleanup
+        await storage.disconnect()
+
     @patch("battery_hawk.core.storage.requests")
     async def test_connect_failure(
         self,
@@ -193,6 +197,9 @@ class TestDataStorageInfluxDB:
         assert result is True
         mock_client_instance.write_points.assert_called_once()
 
+        # Cleanup
+        await storage.disconnect()
+
     async def test_store_reading_not_connected(
         self,
         mock_config_manager: Any,
@@ -255,6 +262,9 @@ class TestDataStorageInfluxDB:
         data_query_made = any("SELECT * FROM" in call for call in query_calls)
         assert data_query_made
 
+        # Cleanup
+        await storage.disconnect()
+
     async def test_get_recent_readings_not_connected(
         self,
         mock_config_manager: Any,
@@ -268,12 +278,19 @@ class TestDataStorageInfluxDB:
         assert result == []
 
     @patch("battery_hawk.core.storage.InfluxDBClient")
+    @patch("battery_hawk.core.storage.requests")
     async def test_health_check_success(
         self,
+        mock_requests: Any,
         mock_influx_client: Any,
         mock_config_manager: Any,
     ) -> None:
         """Test successful health check."""
+        # Mock version detection to 2.x to match the 2.x client being patched
+        mock_response = MagicMock()
+        mock_response.headers = {"X-Influxdb-Version": "2.0.0"}
+        mock_requests.get.return_value = mock_response
+
         # Setup mocks
         mock_client_instance = MagicMock()
         mock_client_instance.ping = MagicMock()
@@ -288,6 +305,9 @@ class TestDataStorageInfluxDB:
         result = await storage.health_check()
 
         assert result is True
+
+        # Cleanup
+        await storage.disconnect()
 
     @patch("battery_hawk.core.storage.InfluxDBClient1x")
     @patch("battery_hawk.core.storage.requests")
@@ -316,6 +336,9 @@ class TestDataStorageInfluxDB:
 
         assert result is False
         assert storage.connected is False
+
+        # Cleanup
+        await storage.disconnect()
 
     @patch("battery_hawk.core.storage.InfluxDBClient1x")
     @patch("battery_hawk.core.storage.requests")
@@ -399,6 +422,9 @@ class TestInfluxDBRetentionPolicies:
         # Verify retention policy queries were executed
         assert mock_client_instance.query.call_count >= 2  # At least 2 policies created
 
+        # Cleanup
+        await storage.disconnect()
+
     @patch("battery_hawk.core.storage.InfluxDBClient1x")
     @patch("battery_hawk.core.storage.requests")
     async def test_get_retention_policies(
@@ -447,6 +473,9 @@ class TestInfluxDBRetentionPolicies:
         assert policies[1]["name"] == "long_term"
         mock_client_instance.query.assert_called()
 
+        # Cleanup
+        await storage.disconnect()
+
     @patch("battery_hawk.core.storage.InfluxDBClient1x")
     @patch("battery_hawk.core.storage.requests")
     async def test_drop_retention_policy(
@@ -489,6 +518,9 @@ class TestInfluxDBRetentionPolicies:
                 drop_call = call
                 break
         assert drop_call is not None
+
+        # Cleanup
+        await storage.disconnect()
 
     def test_get_retention_policy_for_measurement(
         self,
@@ -575,6 +607,9 @@ class TestInfluxDBRetentionPolicies:
         assert (
             write_call_args[0][3] == "autogen"
         )  # retention policy argument (4th parameter)
+
+        # Cleanup
+        await storage.disconnect()
 
 
 @pytest.mark.asyncio
@@ -689,6 +724,9 @@ class TestInfluxDBErrorHandling:
         # Verify writes were called for buffered readings
         assert mock_client_instance.write_points.call_count >= 2
 
+        # Cleanup
+        await storage.disconnect()
+
     @patch("battery_hawk.core.storage.InfluxDBClient1x")
     @patch("battery_hawk.core.storage.requests")
     async def test_write_timeout_handling(
@@ -707,7 +745,7 @@ class TestInfluxDBErrorHandling:
         mock_client_instance = MagicMock()
 
         # Make write operation hang (simulate timeout)
-        def slow_write(*args: Any, **kwargs: Any) -> None:
+        def slow_write(*_args: Any, **_kwargs: Any) -> None:
             time.sleep(10)  # Longer than timeout
 
         mock_client_instance.write_points.side_effect = slow_write
@@ -735,6 +773,9 @@ class TestInfluxDBErrorHandling:
         # Should fail direct write but succeed in buffering
         assert result is True
         assert len(storage._reading_buffer) == 1
+
+        # Cleanup
+        await storage.disconnect()
 
     async def test_connection_error_detection(
         self,
@@ -813,3 +854,85 @@ class TestInfluxDBErrorHandling:
         assert "device2" in device_ids
         assert "device3" in device_ids
         assert "device4" in device_ids
+
+    async def test_filter_influxdb_fields_empty_dict(self) -> None:
+        """Test that empty dictionaries are filtered out from InfluxDB fields."""
+        storage = DataStorage(MagicMock())
+
+        # Test data with empty extra field (the original problem)
+        reading = {
+            "voltage": 12.5,
+            "current": 2.3,
+            "temperature": 25.0,
+            "state_of_charge": 85.0,
+            "extra": {},  # Empty dict that caused the InfluxDB error
+        }
+
+        filtered = storage._filter_influxdb_fields(reading)
+
+        # Empty dict should be filtered out
+        assert "extra" not in filtered
+        assert filtered["voltage"] == 12.5
+        assert filtered["current"] == 2.3
+        assert filtered["temperature"] == 25.0
+        assert filtered["state_of_charge"] == 85.0
+
+    async def test_filter_influxdb_fields_non_empty_dict(self) -> None:
+        """Test that non-empty dictionaries are converted to JSON strings."""
+        storage = DataStorage(MagicMock())
+
+        # Test data with non-empty extra field
+        reading = {
+            "voltage": 12.5,
+            "extra": {"cell_count": 4, "software_version": 1.2},
+        }
+
+        filtered = storage._filter_influxdb_fields(reading)
+
+        # Non-empty dict should be converted to JSON string
+        assert "extra" in filtered
+        assert isinstance(filtered["extra"], str)
+
+        parsed_extra = json.loads(filtered["extra"])
+        assert parsed_extra["cell_count"] == 4
+        assert parsed_extra["software_version"] == 1.2
+
+    async def test_filter_influxdb_fields_none_values(self) -> None:
+        """Test that None values are filtered out."""
+        storage = DataStorage(MagicMock())
+
+        reading = {
+            "voltage": 12.5,
+            "current": None,
+            "temperature": 25.0,
+            "capacity": None,
+        }
+
+        filtered = storage._filter_influxdb_fields(reading)
+
+        # None values should be filtered out
+        assert "current" not in filtered
+        assert "capacity" not in filtered
+        assert filtered["voltage"] == 12.5
+        assert filtered["temperature"] == 25.0
+
+    async def test_filter_influxdb_fields_empty_list(self) -> None:
+        """Test that empty lists are filtered out."""
+        storage = DataStorage(MagicMock())
+
+        reading = {
+            "voltage": 12.5,
+            "cell_voltages": [],  # Empty list
+            "temperatures": [25.0, 26.0],  # Non-empty list
+        }
+
+        filtered = storage._filter_influxdb_fields(reading)
+
+        # Empty list should be filtered out
+        assert "cell_voltages" not in filtered
+        # Non-empty list should be converted to JSON string
+        assert "temperatures" in filtered
+        assert isinstance(filtered["temperatures"], str)
+
+        parsed_temps = json.loads(filtered["temperatures"])
+        assert parsed_temps == [25.0, 26.0]

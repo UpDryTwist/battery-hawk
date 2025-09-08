@@ -24,7 +24,7 @@ from battery_hawk_driver.base.discovery import BLEDiscoveryService
 
 
 async def main() -> int:
-    """Main example function."""
+    """Run the auto-configuration example."""
     # Set up logging
     logging.basicConfig(
         level=logging.INFO,
@@ -52,7 +52,7 @@ async def main() -> int:
         device_factory = DeviceFactory(connection_pool)
         auto_config_service = AutoConfigurationService(config_manager, device_factory)
         device_registry = DeviceRegistry(config_manager, auto_config_service)
-        discovery_service = BLEDiscoveryService(config_manager)
+        BLEDiscoveryService(config_manager)
 
         # Check auto-configuration status
         logger.info("Auto-configuration status:")

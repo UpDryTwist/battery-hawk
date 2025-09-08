@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class AutoConfigurationService:
     """
     Service for automatically configuring discovered devices.
-    
+
     This service monitors discovered devices and automatically configures them
     based on configurable rules and device detection patterns.
     """
@@ -43,7 +43,10 @@ class AutoConfigurationService:
         """
         discovery_config = self.config_manager.get_config("system").get("discovery", {})
         auto_config = discovery_config.get("auto_configure", {})
-        return auto_config.get("enabled", True)  # Default to True to match default config
+        return auto_config.get(
+            "enabled",
+            True,
+        )  # Default to True to match default config
 
     def get_confidence_threshold(self) -> float:
         """
@@ -88,7 +91,7 @@ class AutoConfigurationService:
         discovery_config = self.config_manager.get_config("system").get("discovery", {})
         auto_config = discovery_config.get("auto_configure", {})
         rules = auto_config.get("rules", {})
-        
+
         device_rules = rules.get(detected_type, {})
         if not device_rules.get("auto_configure", True):
             self.logger.debug(
@@ -127,14 +130,14 @@ class AutoConfigurationService:
         """
         discovery_config = self.config_manager.get_config("system").get("discovery", {})
         auto_config = discovery_config.get("auto_configure", {})
-        
+
         if not auto_config.get("auto_assign_names", True):
             # Use device name from advertisement if available
             return device_info.get("name", f"Device_{mac_address}")
 
         rules = auto_config.get("rules", {})
         device_rules = rules.get(device_type, {})
-        
+
         # Get name template
         name_template = device_rules.get(
             "default_name_template",
@@ -143,7 +146,7 @@ class AutoConfigurationService:
 
         # Extract MAC suffix (last 4 characters)
         mac_suffix = mac_address.replace(":", "")[-4:].upper()
-        
+
         # Format the template
         try:
             return name_template.format(
@@ -173,7 +176,7 @@ class AutoConfigurationService:
         discovery_config = self.config_manager.get_config("system").get("discovery", {})
         auto_config = discovery_config.get("auto_configure", {})
         rules = auto_config.get("rules", {})
-        
+
         device_rules = rules.get(device_type, {})
         return device_rules.get(
             "polling_interval",
@@ -200,14 +203,24 @@ class AutoConfigurationService:
         try:
             # Auto-detect device type
             advertisement_data = device_info.get("advertisement_data", {})
-            detected_type = self.device_factory.auto_detect_device_type(advertisement_data)
+            detected_type = self.device_factory.auto_detect_device_type(
+                advertisement_data,
+            )
 
-            if not self.should_auto_configure_device(mac_address, device_info, detected_type):
+            if not self.should_auto_configure_device(
+                mac_address,
+                device_info,
+                detected_type,
+            ):
                 return False
 
             # Generate configuration
-            friendly_name = self.generate_device_name(mac_address, detected_type, device_info)
-            polling_interval = self.get_polling_interval(detected_type)
+            friendly_name = self.generate_device_name(
+                mac_address,
+                detected_type or "Unknown",
+                device_info,
+            )
+            polling_interval = self.get_polling_interval(detected_type or "Unknown")
 
             # Configure the device
             success = await device_registry.configure_device(
@@ -225,13 +238,12 @@ class AutoConfigurationService:
                     detected_type,
                     friendly_name,
                 )
-            else:
-                self.logger.warning(
-                    "Failed to auto-configure device %s",
-                    mac_address,
-                )
-
-            return success
+                return True
+            self.logger.warning(
+                "Failed to auto-configure device %s",
+                mac_address,
+            )
+            return False  # noqa: TRY300
 
         except Exception:
             self.logger.exception(
@@ -256,7 +268,7 @@ class AutoConfigurationService:
             Dictionary mapping MAC addresses to configuration success status
         """
         results = {}
-        
+
         if not self.is_enabled():
             self.logger.debug("Auto-configuration is disabled")
             return results
@@ -269,7 +281,7 @@ class AutoConfigurationService:
                     device_registry,
                 )
                 results[mac_address] = success
-            except Exception:
+            except Exception:  # noqa: PERF203
                 self.logger.exception(
                     "Error processing device %s for auto-configuration",
                     mac_address,

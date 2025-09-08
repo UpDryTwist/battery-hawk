@@ -311,6 +311,14 @@ class BM6Device(BaseMonitorDevice):
             if command == "request_voltage_temp":
                 await self.request_voltage_temp()
                 return DeviceStatus(connected=True, last_command=command)
+            if command == "status":
+                # Return current device status without sending any BLE commands
+                return DeviceStatus(
+                    connected=connection is not None,
+                    last_command=command,
+                    protocol_version=self.protocol_version,
+                    extra={"device_type": "BM6", "device_address": self.device_address},
+                )
             raise ValueError(f"Unsupported BM6 command: {command}")
 
         except Exception:
