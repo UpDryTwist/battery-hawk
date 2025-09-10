@@ -44,19 +44,17 @@ def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
         Result of the coroutine
     """
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If we're already in an event loop, we need to use a different approach
-            # This is a simplified version - in production you might want to use
-            # asyncio.create_task() or similar
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, coro)
-                return future.result()
-        else:
-            return loop.run_until_complete(coro)
+        # Prefer get_running_loop to avoid DeprecationWarning in Python 3.12+
+        asyncio.get_running_loop()
     except RuntimeError:
-        # No event loop, create one
+        # No running loop in this thread: safe to use asyncio.run()
         return asyncio.run(coro)
+    else:
+        # A loop is already running (e.g., when called from an async context).
+        # Offload to a separate thread that can use asyncio.run safely.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
 
 
 class DeviceValidationError(Exception):

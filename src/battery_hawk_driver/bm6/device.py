@@ -516,8 +516,19 @@ class BM6Device(BaseMonitorDevice):
                 data_bytes.hex(),
             )
 
-            # Try to parse as real BM6 data first (with AES decryption)
-            parsed_data = self.parser.parse_real_bm6_data(data_bytes)
+            # If data looks like legacy/cleartext (mock) format, parse without decryption
+            header_len = 2  # BM6 legacy header length
+            header_start = 0xDD
+            header_follow = (0x5A, 0xA5)
+            if (
+                len(data_bytes) >= header_len
+                and data_bytes[0] == header_start
+                and data_bytes[1] in header_follow
+            ):
+                parsed_data = self.parser.parse_notification(data_bytes)
+            else:
+                # Real device path: decrypt + parse
+                parsed_data = self.parser.parse_real_bm6_data(data_bytes)
 
             if parsed_data:
                 self._latest_data.update(parsed_data)

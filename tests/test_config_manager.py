@@ -38,29 +38,29 @@ class TestConfigManager:
 
     def test_load_defaults_when_missing(self, temp_config_dir: str) -> None:
         """Test loading defaults when config is missing."""
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         for key in DEFAULTS:
             assert cm.get_config(key) == DEFAULTS[key]
 
     def test_save_and_reload(self, temp_config_dir: str) -> None:
         """Test saving and reloading config section."""
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         sys_cfg = cm.get_config("system")
         sys_cfg["logging"]["level"] = "DEBUG"
         cm.save_config("system")
         # Reload
-        cm2 = ConfigManager(str(temp_config_dir))
+        cm2 = ConfigManager(str(temp_config_dir), enable_watchers=False)
         assert cm2.get_config("system")["logging"]["level"] == "DEBUG"
 
     def test_schema_validation_valid(self, temp_config_dir: str) -> None:
         """Test schema validation for valid config."""
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         # Should not raise
         cm._validate_config("system")
 
     def test_schema_validation_invalid(self, temp_config_dir: str) -> None:
         """Test schema validation for invalid config."""
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         cm.configs["system"].pop("version")
         with pytest.raises(ConfigError):
             cm._validate_config("system")
@@ -72,7 +72,7 @@ class TestConfigManager:
     ) -> None:
         """Test environment variable override is applied."""
         monkeypatch.setenv("BATTERYHAWK_SYSTEM_LOGGING_LEVEL", '"WARNING"')
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         assert cm.get_config("system")["logging"]["level"] == "WARNING"
 
     def test_invalid_json_falls_back_to_default(self, temp_config_dir: str) -> None:
@@ -81,12 +81,12 @@ class TestConfigManager:
         path = os.path.join(temp_config_dir, "system.json")
         with open(path, "w") as f:
             f.write("{ invalid json }")
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         assert cm.get_config("system") == DEFAULTS["system"]
 
     def test_register_and_notify_listener(self, temp_config_dir: str) -> None:
         """Test registering and notifying config listeners."""
-        cm = ConfigManager(str(temp_config_dir))
+        cm = ConfigManager(str(temp_config_dir), enable_watchers=False)
         called = {}
 
         def listener(key: str, config: dict) -> None:

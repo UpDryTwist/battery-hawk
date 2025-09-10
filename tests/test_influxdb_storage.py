@@ -522,7 +522,7 @@ class TestInfluxDBRetentionPolicies:
         # Cleanup
         await storage.disconnect()
 
-    def test_get_retention_policy_for_measurement(
+    async def test_get_retention_policy_for_measurement(
         self,
         mock_config_manager: Any,
     ) -> None:

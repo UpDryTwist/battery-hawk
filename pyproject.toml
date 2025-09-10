@@ -115,6 +115,14 @@ pytest-asyncio = "^1.0.0"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["local-instance", "dist", "htmlcov", ".git", ".venv", "node_modules"]
+filterwarnings = [
+  # Third-party deprecations we don't control
+  'ignore:datetime\.datetime\.utcfromtimestamp\(\) is deprecated:DeprecationWarning',
+  # Watchdog sometimes hits inotify limits in CI; we don't need thread tracebacks as warnings
+  'ignore:Exception in thread .*inotify instance limit reached:pytest.PytestUnhandledThreadExceptionWarning',
+  # Flask/asyncio loop access in test context may emit deprecation; we've updated code but filter residuals
+  'ignore:There is no current event loop:DeprecationWarning',
+]
 
 [build-system]
 requires = ["poetry-core"]

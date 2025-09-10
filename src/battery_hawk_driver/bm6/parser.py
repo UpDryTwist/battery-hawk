@@ -43,6 +43,9 @@ from .protocol import (
     validate_response,
 )
 
+# Minimum hex string length needed to apply padded real-time frame fallback
+MIN_HEX_LEN_PADDED_REALTIME = 20
+
 
 class BM6Parser:
     """Parser for BM6 device responses."""
@@ -172,29 +175,65 @@ class BM6Parser:
             )
             return None
 
+        # Parse all fields (with compatibility fallback)
+        result: dict[str, Any] = {}
+        parsed = self._parse_realtime_fields_with_fallback(hex_data)
+        if parsed is None:
+            return None
+        result.update(parsed)
+        return result
+
+    def _parse_realtime_fields_with_fallback(
+        self,
+        hex_data: str,
+    ) -> dict[str, Any] | None:
+        """
+        Parse real-time fields with a fallback for padded frames.
+
+        This helper trims cyclomatic complexity from _parse_real_time_data.
+        """
         result: dict[str, Any] = {}
 
+        # Primary mapping (spec-conformant): positions are per constants
+        voltage_hex = hex_data[VOLTAGE_POSITION_START:VOLTAGE_POSITION_END]
+        temp_sign_hex = hex_data[
+            TEMPERATURE_SIGN_POSITION_START:TEMPERATURE_SIGN_POSITION_END
+        ]
+        temp_hex = hex_data[TEMPERATURE_POSITION_START:TEMPERATURE_POSITION_END]
+        soc_hex = hex_data[SOC_POSITION_START:SOC_POSITION_END]
+
+        # Some BM6 firmwares (and our tests' MockBLEClient) include an extra pad byte
+        # between the sign and the temperature. Detect and adjust offsets.
+        if temp_hex == "00" and len(hex_data) >= MIN_HEX_LEN_PADDED_REALTIME:
+            # Shift fields by +4 hex chars (2 bytes): one pad byte and one state byte
+            # New positions relative to prefix:
+            # - temperature: 12..14
+            # - soc:         14..16
+            # - voltage:     16..20 (2 bytes)
+            alt_temp_hex = hex_data[12:14]
+            alt_soc_hex = hex_data[14:16]
+            alt_voltage_hex = hex_data[16:20]
+            # Validate that alt mapping looks sane (non-empty and not all zeros)
+            if alt_temp_hex and alt_temp_hex != "00" and alt_voltage_hex.strip("0"):
+                self.logger.info(
+                    "Detected padded real-time frame; using alternate field offsets",
+                )
+                temp_hex = alt_temp_hex
+                soc_hex = alt_soc_hex
+                voltage_hex = alt_voltage_hex
+
         try:
-            # Parse voltage (position 14-18 in hex string)
-            voltage_hex = hex_data[VOLTAGE_POSITION_START:VOLTAGE_POSITION_END]
+            # Parse values
             voltage_raw = int(voltage_hex, 16)
             voltage = voltage_raw / VOLTAGE_CONVERSION_FACTOR
             result["voltage"] = voltage
             self.logger.info("Parsed voltage: %s -> %.2fV", voltage_hex, voltage)
 
-            # Parse temperature (position 8-10, with sign at 6-8)
-            temp_sign_hex = hex_data[
-                TEMPERATURE_SIGN_POSITION_START:TEMPERATURE_SIGN_POSITION_END
-            ]
-            temp_hex = hex_data[TEMPERATURE_POSITION_START:TEMPERATURE_POSITION_END]
-
             temperature_raw = int(temp_hex, 16)
             temperature_sign = int(temp_sign_hex, 16)
-
-            # For real-time data, temperature is already in degrees Celsius (not decidegrees)
+            # For real-time data, temperature is in degrees Celsius (not decidegrees)
             temperature = float(temperature_raw)
             temperature = -temperature if temperature_sign == 1 else temperature
-
             result["temperature"] = temperature
             self.logger.info(
                 "Parsed temperature: sign=%s, value=%s -> %.1f°C",
@@ -203,8 +242,6 @@ class BM6Parser:
                 temperature,
             )
 
-            # Parse state of charge (position 12-14)
-            soc_hex = hex_data[SOC_POSITION_START:SOC_POSITION_END]
             soc = int(soc_hex, 16)
             result["state_of_charge"] = soc
             self.logger.info("Parsed SoC: %s -> %d%%", soc_hex, soc)
@@ -238,7 +275,6 @@ class BM6Parser:
                 rapid_deceleration_hex,
                 rapid_deceleration,
             )
-
         except (ValueError, IndexError) as e:
             self.logger.warning("Failed to parse BM6 real-time data: %s", e)
             return None

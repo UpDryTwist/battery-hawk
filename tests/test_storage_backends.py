@@ -78,7 +78,9 @@ class MockConfigManager(ConfigManager):
 
 
 class TestStorageBackend(BaseStorageBackend):
-    """Test implementation of BaseStorageBackend for testing."""
+    """Test implementation of BaseStorageBackend for testing (not collected as tests)."""
+
+    __test__ = False  # Tell pytest not to collect this helper class as a test
 
     @property
     def backend_name(self) -> str:
@@ -204,7 +206,6 @@ class TestBaseStorageBackend:
         assert "metrics" in info
 
 
-@pytest.mark.asyncio
 class TestStorageBackendFactory:
     """Test cases for StorageBackendFactory."""
 

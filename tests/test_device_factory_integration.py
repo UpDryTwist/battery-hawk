@@ -196,12 +196,12 @@ class TestDeviceFactoryEndToEnd:
         assert hasattr(reading, "temperature")
         assert hasattr(reading, "state_of_charge")
 
-        # Verify data matches expected values (using mock implementation values)
-        # Note: BM6 device currently returns mock data with 0.0 values
-        assert reading.voltage == 0.0  # Mock implementation returns 0.0
-        assert reading.current == 0.0  # Mock implementation returns 0.0
-        assert reading.temperature == 25.0  # Mock implementation returns 25.0
-        assert reading.state_of_charge == 0.0  # Mock implementation returns 0.0
+        # Verify data matches expected values based on the tests/support MockBLEClient BM6 response
+        # MockBLEClient._simulate_bm6_response yields ~15.00V and ~20°C with SoC=100%
+        assert reading.voltage == pytest.approx(15.0, rel=0.0, abs=0.1)
+        assert reading.current == pytest.approx(0.0, rel=0.0, abs=0.1)
+        assert reading.temperature == pytest.approx(20.0, rel=0.0, abs=0.5)
+        assert reading.state_of_charge == pytest.approx(100.0, rel=0.0, abs=0.1)
 
     @pytest.mark.asyncio
     async def test_bm2_end_to_end_data_flow(
