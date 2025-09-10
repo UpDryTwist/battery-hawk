@@ -135,7 +135,32 @@ GET /api/devices?limit=10&offset=0
         "vehicle_id": "my-car",
         "status": "configured",
         "polling_interval": 3600,
-        "last_seen": "2024-01-15T10:30:00Z"
+        "discovered_at": "2024-01-15T10:00:00Z",
+        "configured_at": "2024-01-15T10:05:00Z",
+        "connection_config": {
+          "retry_attempts": 3,
+          "retry_interval": 60,
+          "reconnection_delay": 300
+        },
+        "latest_reading": {
+          "voltage": 12.6,
+          "current": 1.2,
+          "temperature": 25.0,
+          "state_of_charge": 85.0,
+          "capacity": 50.0,
+          "cycles": 10,
+          "timestamp": 1234567890.0,
+          "extra": {"device_type": "BM6"}
+        },
+        "last_reading_time": "2024-01-15T10:30:00Z",
+        "device_status": {
+          "connected": true,
+          "error_code": null,
+          "error_message": null,
+          "protocol_version": "1.0",
+          "last_command": "status"
+        },
+        "last_status_update": "2024-01-15T10:30:01Z"
       }
     }
   ],
@@ -160,6 +185,15 @@ GET /api/devices/{mac_address}
 
 **Path Parameters:**
 - `mac_address` (string): Device MAC address (e.g., "AA:BB:CC:DD:EE:FF")
+
+**Response Includes:**
+- Configuration fields: mac_address, device_type, friendly_name, vehicle_id, status, discovered_at, configured_at, polling_interval, connection_config
+- Latest telemetry fields:
+  - latest_reading: { voltage, current, temperature, state_of_charge, capacity, cycles, timestamp, extra }
+  - last_reading_time: ISO timestamp when the latest_reading was captured
+- Runtime status fields:
+  - device_status: { connected, error_code, error_message, protocol_version, last_command }
+  - last_status_update: ISO timestamp when device_status was updated
 
 ### Configure Device
 Configure a discovered device for monitoring.

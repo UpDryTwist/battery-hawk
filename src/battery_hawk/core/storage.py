@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 from collections import deque
@@ -275,6 +276,10 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             "database": "battery_hawk",
             "username": "",
             "password": "",
+            # v2-specific optional entries
+            "token": "",
+            "org": "",
+            "bucket": "",
             "timeout": 10000,  # 10 seconds
             "retries": 3,
             "retention_policies": {
@@ -302,6 +307,63 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         for key, default_value in defaults.items():
             if key not in influx_config:
                 influx_config[key] = default_value
+
+        # Apply plain INFLUXDB_* environment overrides for convenience
+        env_overrides: dict[str, tuple[str, type]] = {
+            "INFLUXDB_HOST": ("host", str),
+            "INFLUXDB_PORT": ("port", int),
+            "INFLUXDB_DATABASE": ("database", str),
+            "INFLUXDB_USERNAME": ("username", str),
+            "INFLUXDB_PASSWORD": ("password", str),
+            "INFLUXDB_TOKEN": ("token", str),
+            "INFLUXDB_ORG": ("org", str),
+            "INFLUXDB_BUCKET": ("bucket", str),
+            "INFLUXDB_TIMEOUT": ("timeout", int),
+        }
+        for env_key, (cfg_key, caster) in env_overrides.items():
+            val = os.environ.get(env_key)
+            if val is not None and val != "":
+                prev_val = influx_config.get(cfg_key)
+                try:
+                    cast_val = caster(val)
+                    influx_config[cfg_key] = cast_val
+
+                    # Debug visibility for plain env overrides, with redaction for secrets
+                    if cfg_key in ("password", "token"):
+                        prev_disp = "<redacted>" if prev_val else prev_val
+                        new_disp = "<redacted>"
+                    else:
+                        prev_disp = prev_val
+                        new_disp = cast_val
+
+                    if prev_val != cast_val:
+                        self.logger.debug(
+                            "Plain INFLUXDB env override %s -> %s: %r -> %r",
+                            env_key,
+                            cfg_key,
+                            prev_disp,
+                            new_disp,
+                        )
+                except (TypeError, ValueError):
+                    # Keep previous value if casting fails
+                    self.logger.warning(
+                        "Invalid value for %s: %r; keeping existing %s=%r",
+                        env_key,
+                        val,
+                        cfg_key,
+                        influx_config.get(cfg_key),
+                    )
+
+        # Final debug summary (safe fields only)
+        safe_summary = {
+            "host": influx_config.get("host"),
+            "port": influx_config.get("port"),
+            "org": influx_config.get("org"),
+            "bucket": influx_config.get("bucket") or influx_config.get("database"),
+            "database": influx_config.get("database"),
+            "timeout": influx_config.get("timeout"),
+        }
+        self.logger.debug("Resolved InfluxDB config (safe): %s", safe_summary)
 
         return influx_config
 
@@ -520,12 +582,29 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 self._influxdb_version = "2.x"
                 self.logger.info("Detected InfluxDB 2.x (version: %s)", version_header)
 
-                # Initialize InfluxDB 2.x client
+                # Initialize InfluxDB 2.x client using token/org
+                token: str = str(config.get("token") or "")
+                org: str = str(config.get("org") or "")
+                bucket: str = str(config.get("bucket") or config.get("database") or "")
+                timeout_val: int = int(config.get("timeout", 10000))
+
+                # Extra debug to help diagnose misconfigured org/bucket
+                debug_safe = {
+                    "url": url,
+                    "org": org,
+                    "bucket": bucket,
+                    "timeout": timeout_val,
+                }
+                self.logger.debug(
+                    "InfluxDB v2 client init params (safe): %s",
+                    debug_safe,
+                )
+
                 self.client = InfluxDBClient(
                     url=url,
-                    username=config["username"] if config["username"] else None,
-                    password=config["password"] if config["password"] else None,
-                    timeout=config["timeout"],
+                    token=token,
+                    org=org,
+                    timeout=timeout_val,
                 )
 
                 # Initialize APIs for 2.x
@@ -1184,6 +1263,14 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                     "time": datetime.now(timezone.utc),
                 }
 
+                # Debug the exact data being written
+                self.logger.debug(
+                    "InfluxDB v1 point for device %s: tags=%s fields=%s",
+                    device_id,
+                    point_data.get("tags"),
+                    point_data.get("fields"),
+                )
+
                 # Write data point using InfluxDB 1.x client
                 if not self.client_1x:
                     return False
@@ -1218,17 +1305,40 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 }
 
                 # Write data point using InfluxDB 2.x client
-                if not self.write_api:
+                if self.write_api is None:
                     return False
                 loop = asyncio.get_event_loop()
+                bucket = str(
+                    influx_config.get("bucket") or influx_config.get("database"),
+                )
+                org = str(influx_config.get("org") or "")
+
+                # Debug write context (safe)
+                self.logger.debug(
+                    "InfluxDB v2 write: bucket=%s org=%s measurement=%s device_id=%s",
+                    bucket,
+                    org,
+                    point_data.get("measurement"),
+                    device_id,
+                )
+                # Debug the exact data being written
+                self.logger.debug(
+                    "InfluxDB v2 point for device %s: tags=%s fields=%s",
+                    device_id,
+                    point_data.get("tags"),
+                    point_data.get("fields"),
+                )
+
+                write_api = self.write_api
                 await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
-                        self.write_api.write,
-                        database,
-                        retention_policy,  # retention policy
-                        point_data,
-                        WritePrecision.S,  # second precision
+                        lambda: write_api.write(
+                            bucket=bucket,
+                            org=org,
+                            record=point_data,
+                            write_precision=WritePrecision.S,
+                        ),
                     ),
                     timeout=self._error_recovery_config.connection_timeout_seconds,
                 )
@@ -1412,6 +1522,137 @@ class InfluxDBStorageBackend(BaseStorageBackend):
         else:
             return True
 
+    def _parse_flux_rows(self, result: Any) -> list[dict[str, Any]]:
+        """
+        Parse Flux query result (pivoted) into list of dicts.
+
+        Assumes the Flux query pivoted field columns (one row per _time). Converts
+        _time to RFC3339 'time' and removes internal columns.
+        """
+        rows: list[dict[str, Any]] = []
+        try:
+            # The python client returns a list of FluxTable objects
+            for table in result or []:
+                for rec in getattr(table, "records", []) or []:
+                    # Each record is a FluxRecord with .values dict
+                    values = dict(getattr(rec, "values", {}) or {})
+
+                    # Extract and normalize time
+                    t = values.pop("_time", None)
+                    iso: str | None
+                    if isinstance(t, datetime):
+                        try:
+                            iso = (
+                                t.astimezone(timezone.utc)
+                                .isoformat()
+                                .replace(
+                                    "+00:00",
+                                    "Z",
+                                )
+                            )
+                        except (ValueError, AttributeError, TypeError):
+                            iso = t.isoformat()
+                    else:
+                        iso = (
+                            t.isoformat()
+                            if hasattr(t, "isoformat")
+                            else (t if isinstance(t, str) else None)
+                        )
+
+                    # Remove internal Flux columns
+                    for k in (
+                        "result",
+                        "table",
+                        "_start",
+                        "_stop",
+                        "_measurement",
+                        "_field",
+                        "_value",
+                    ):
+                        values.pop(k, None)
+
+                    if iso is not None:
+                        values["time"] = iso
+
+                    # Drop None values
+                    clean = {k: v for k, v in values.items() if v is not None}
+                    rows.append(clean)
+        except Exception:
+            self.logger.exception(
+                "Failed to parse Flux rows; returning partial results",
+            )
+        return rows
+
+    def _build_flux_vehicle_summary_query(
+        self,
+        bucket: str,
+        vehicle_id: str,
+        hours: int,
+    ) -> str:
+        """Build Flux query for vehicle summary over a time window in hours."""
+        return (
+            f'from(bucket: "{bucket}")'
+            f" |> range(start: -{int(hours)}h)"
+            f' |> filter(fn: (r) => r._measurement == "battery_reading" and r.vehicle_id == {json.dumps(vehicle_id)})'
+            f' |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")'
+        )
+
+    def _process_v1_summary_result(
+        self,
+        result: Any,
+        vehicle_id: str,
+        hours: int,
+    ) -> dict[str, Any] | None:
+        """Convert InfluxDB 1.x aggregation result to summary dict if available."""
+        get_points = getattr(result, "get_points", None)
+        if not callable(get_points):
+            return None
+        try:
+            pts_iter = get_points()
+            points: list[dict[str, Any]] = list(pts_iter)  # type: ignore[misc]
+        except Exception:  # noqa: BLE001
+            return None
+        if not points:
+            return None
+        point = points[0]
+        return {
+            "vehicle_id": vehicle_id,
+            "period_hours": hours,
+            "avg_voltage": float(point.get("avg_voltage", 0.0) or 0.0),
+            "avg_current": float(point.get("avg_current", 0.0) or 0.0),
+            "avg_temperature": float(point.get("avg_temperature", 0.0) or 0.0),
+            "reading_count": int(point.get("reading_count", 0) or 0),
+        }
+
+    def _compute_summary_from_rows(
+        self,
+        rows: list[dict[str, Any]],
+        vehicle_id: str,
+        hours: int,
+    ) -> dict[str, Any]:
+        """Compute summary aggregates from parsed Flux rows."""
+        voltages: list[float] = []
+        currents: list[float] = []
+        temps: list[float] = []
+        for r in rows:
+            v = r.get("voltage")
+            if isinstance(v, (int, float)):
+                voltages.append(float(v))
+            c = r.get("current")
+            if isinstance(c, (int, float)):
+                currents.append(float(c))
+            t = r.get("temperature")
+            if isinstance(t, (int, float)):
+                temps.append(float(t))
+        return {
+            "vehicle_id": vehicle_id,
+            "period_hours": hours,
+            "avg_voltage": float(sum(voltages) / len(voltages)) if voltages else 0.0,
+            "avg_current": float(sum(currents) / len(currents)) if currents else 0.0,
+            "avg_temperature": float(sum(temps) / len(temps)) if temps else 0.0,
+            "reading_count": len(rows),
+        }
+
     def _is_connection_error(self, error: Exception) -> bool:
         """
         Check if an error indicates a connection problem.
@@ -1482,8 +1723,13 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 LIMIT {limit}
             """  # nosec B608  # noqa: S608
 
+            org_v2 = influx_config.get("org") or None
+            bucket_v2 = influx_config.get("bucket") or influx_config.get("database")
             self.logger.debug(
-                "Querying readings for device %s (limit: %d)",
+                "InfluxDB v%s query context: org=%s bucket=%s device_id=%s limit=%d",
+                self._influxdb_version,
+                org_v2,
+                bucket_v2,
                 device_id,
                 limit,
             )
@@ -1500,35 +1746,33 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             else:
                 if self.query_api is None:
                     raise ConnectionError("InfluxDB 2.x query API not initialized")
+                # Build Flux query for InfluxDB 2.x
+                org = influx_config.get("org") or None
+                # Use a conservative time window; adjust if needed
+                flux_query = (
+                    f'from(bucket: "{bucket_v2}")'
+                    f" |> range(start: -30d)"
+                    f' |> filter(fn: (r) => r._measurement == "battery_reading" and r.device_id == {json.dumps(device_id)})'
+                    f' |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")'
+                    f' |> sort(columns: ["_time"], desc: true)'
+                    f" |> limit(n: {limit})"
+                )
+                self.logger.debug("Flux query for recent readings: %s", flux_query)
                 result = await loop.run_in_executor(
                     None,
                     self.query_api.query,
-                    query,
-                    database,
+                    flux_query,
+                    org,
                 )
 
             # Convert result to list of dictionaries
-            readings = []
+            readings: list[dict[str, Any]] = []
             if result:
-                # Handle different result types from InfluxDB versions
-                if hasattr(result, "get_points"):
-                    readings.extend(dict(point) for point in result.get_points())  # type: ignore[attr-defined]
-                elif hasattr(result, "__iter__"):
-                    # For InfluxDB 2.x results that might be iterable
-                    try:
-                        for item in result:  # type: ignore[attr-defined]
-                            if hasattr(item, "get_points"):
-                                readings.extend(
-                                    dict(point)
-                                    for point in item.get_points()  # type: ignore[attr-defined]
-                                )
-                            else:
-                                readings.append(
-                                    dict(item) if hasattr(item, "__dict__") else item,  # type: ignore[arg-type]
-                                )
-                    except (TypeError, AttributeError):
-                        # Fallback for unexpected result types
-                        pass
+                if self._influxdb_version == "1.x":
+                    if hasattr(result, "get_points"):
+                        readings.extend(dict(point) for point in result.get_points())  # type: ignore[attr-defined]
+                else:
+                    readings = self._parse_flux_rows(result)
 
             # Update metrics
             read_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -1603,8 +1847,13 @@ class InfluxDBStorageBackend(BaseStorageBackend):
                 AND time > now() - {hours}h
             """  # nosec B608  # noqa: S608
 
+            org_v2 = influx_config.get("org") or None
+            bucket_v2 = influx_config.get("bucket") or influx_config.get("database")
             self.logger.debug(
-                "Getting summary for vehicle %s (period: %d hours)",
+                "Getting summary (v%s): org=%s bucket=%s vehicle_id=%s hours=%s",
+                self._influxdb_version,
+                org_v2,
+                bucket_v2,
                 vehicle_id,
                 hours,
             )
@@ -1621,44 +1870,36 @@ class InfluxDBStorageBackend(BaseStorageBackend):
             else:
                 if self.query_api is None:
                     raise ConnectionError("InfluxDB 2.x query API not initialized")
+                # Build Flux query for InfluxDB 2.x
+                org = influx_config.get("org") or None
+                bucket_str = str(bucket_v2 or "")
+                flux_query = self._build_flux_vehicle_summary_query(
+                    bucket_str,
+                    vehicle_id,
+                    int(hours),
+                )
+                self.logger.debug("Flux query for vehicle summary: %s", flux_query)
                 result = await loop.run_in_executor(
                     None,
                     self.query_api.query,
-                    query,
-                    database,
+                    flux_query,
+                    org,
                 )
 
             # Process result
             if result:
-                # Handle different result types from InfluxDB versions
-                points = []
-                if hasattr(result, "get_points"):
-                    points = list(result.get_points())  # type: ignore[attr-defined]
-                elif hasattr(result, "__iter__"):
-                    # For InfluxDB 2.x results that might be iterable
-                    try:
-                        for item in result:  # type: ignore[attr-defined]
-                            if hasattr(item, "get_points"):
-                                points.extend(list(item.get_points()))  # type: ignore[attr-defined]
-                            else:
-                                points.append(
-                                    dict(item) if hasattr(item, "__dict__") else item,  # type: ignore[arg-type]
-                                )
-                    except (TypeError, AttributeError):
-                        # Fallback for unexpected result types
-                        pass
-                if points:
-                    point = points[0]
-                    return {
-                        "vehicle_id": vehicle_id,
-                        "period_hours": hours,
-                        "avg_voltage": float(point.get("avg_voltage", 0.0) or 0.0),
-                        "avg_current": float(point.get("avg_current", 0.0) or 0.0),
-                        "avg_temperature": float(
-                            point.get("avg_temperature", 0.0) or 0.0,
-                        ),
-                        "reading_count": int(point.get("reading_count", 0) or 0),
-                    }
+                if self._influxdb_version == "1.x":
+                    v1 = self._process_v1_summary_result(result, vehicle_id, int(hours))
+                    if v1 is not None:
+                        return v1
+                else:
+                    rows = self._parse_flux_rows(result)
+                    if rows:
+                        return self._compute_summary_from_rows(
+                            rows,
+                            vehicle_id,
+                            int(hours),
+                        )
 
             # No data found
             return self._empty_summary(vehicle_id, hours)

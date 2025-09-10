@@ -19,6 +19,8 @@ Based on analysis of reference implementations:
 - **Write Characteristic**: `0000fff3-0000-1000-8000-00805f9b34fb`
 - **Notify Characteristic**: `0000fff4-0000-1000-8000-00805f9b34fb`
 - **Encryption**: AES-ECB with key "legend" + 0xFF + 0xFE + "0100009"
+  - IMPORTANT: BM6 protocol requires AES-ECB (no IV). Do NOT change to CBC/CTR/etc.
+    Devices will silently ignore commands/responses if the mode is incorrect.
 - **Communication Pattern**:
   1. Connect via BleakClient
   2. Write encrypted command to FFF3
@@ -246,7 +248,7 @@ From the reference implementations, the BM6 communication pattern is:
 ### Critical Implementation Notes
 
 - **AES Key**: Must use exact key `[108, 101, 97, 103, 101, 110, 100, 255, 254, 48, 49, 48, 48, 48, 48, 57]`
-- **Encryption Mode**: AES-CBC with 16-byte zero IV (examples show this pattern)
+- **Encryption Mode**: AES-ECB (no IV). This MUST remain ECB; using CBC/CTR/etc. breaks communication.
 - **Command Format**: "d15507" + padding to 16 bytes, then encrypt
 - **Response Format**: Encrypted 16-byte blocks, decrypt then parse hex
 - **Data Parsing**:

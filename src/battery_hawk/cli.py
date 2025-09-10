@@ -1022,7 +1022,7 @@ async def _perform_scan(
     short_timeout: int | None,
 ) -> dict[str, Any]:
     """Perform the BLE scan and return discovered devices."""
-    discovery_service = BLEDiscoveryService(config_manager)
+    discovery_service = BLEDiscoveryService(config_manager, disable_storage=no_storage)
 
     scan_description = f"Scanning for BM6 and BM2 devices for {duration} seconds"
     if scan_until_new:

@@ -165,7 +165,15 @@ def main() -> None:
             # Show first device details
             first_device = devices["data"][0]
             mac_address = first_device["id"]
-            first_device["attributes"]
+            attrs = first_device.get("attributes", {})
+            logger.info(
+                "First device latest_reading: %s",
+                json.dumps(attrs.get("latest_reading")),
+            )
+            logger.info(
+                "First device status: %s",
+                json.dumps(attrs.get("device_status")),
+            )
 
             # 4. Device Readings
 

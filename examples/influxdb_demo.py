@@ -14,7 +14,7 @@ Usage:
 
 Requirements:
     - InfluxDB server running on localhost:8086
-    - Or set BATTERYHAWK_INFLUXDB_ENABLED=false to run in disabled mode
+    - Or set BATTERYHAWK_SYSTEM_INFLUXDB_ENABLED=false to run in disabled mode
 """
 
 import asyncio
@@ -64,7 +64,9 @@ async def test_influxdb_connection(
     else:
         logger.warning("❌ Failed to connect to InfluxDB")
         logger.info("This is expected if InfluxDB is not running")
-        logger.info("Set BATTERYHAWK_INFLUXDB_ENABLED=false to test disabled mode")
+        logger.info(
+            "Set BATTERYHAWK_SYSTEM_INFLUXDB_ENABLED=false to test disabled mode",
+        )
         return False
 
     # Test health check
@@ -256,7 +258,7 @@ async def demo_disabled_mode() -> None:
 
 if __name__ == "__main__":
     # Check if InfluxDB should be disabled via environment variable
-    if os.getenv("BATTERYHAWK_INFLUXDB_ENABLED", "").lower() == "false":
+    if os.getenv("BATTERYHAWK_SYSTEM_INFLUXDB_ENABLED", "").lower() == "false":
         asyncio.run(demo_disabled_mode())
     else:
         asyncio.run(demo_influxdb_storage())

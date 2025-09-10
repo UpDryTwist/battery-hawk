@@ -123,25 +123,33 @@ class BLEDiscoveryService:
             self.logger.debug("Acquired BLE scan semaphore for device discovery")
             devices = await BleakScanner.discover(timeout=duration, return_adv=True)
 
-        # Handle the return format properly - it should be a list of (device, advertisement_data) tuples
+        # Log how many items were returned from the scanner
+        self.logger.debug(
+            "Device discovery returned %d item(s)",
+            len(devices) if hasattr(devices, "__len__") else -1,
+        )
+
+        # Handle the return format: dict values are (device, advertisement_data) tuples
+        matched = 0
         for device, advertisement_data in devices.values():
-            # Ensure device is a proper BLEDevice and check if it's a potential battery monitor
-            if (
-                hasattr(device, "address")
-                and hasattr(device, "name")
-                and self._is_potential_battery_monitor(device)
+            # Compose a name from device.name or advertised local_name
+            name = (
+                getattr(device, "name", None)
+                or getattr(advertisement_data, "local_name", None)
+                or ""
+            )
+
+            if hasattr(device, "address") and self._is_potential_battery_monitor_name(
+                name,
             ):
                 # Extract RSSI, handling MagicMock objects
                 rssi = getattr(advertisement_data, "rssi", None)
-                if hasattr(rssi, "_mock_name") or hasattr(
-                    rssi,
-                    "_mock_return_value",
-                ):
+                if hasattr(rssi, "_mock_name") or hasattr(rssi, "_mock_return_value"):
                     rssi = None  # MagicMock object, use None instead
 
                 device_data = {
                     "mac_address": device.address,  # type: ignore[reportAttributeAccessIssue]
-                    "name": device.name or "Unknown",  # type: ignore[reportAttributeAccessIssue]
+                    "name": name or "Unknown",
                     "rssi": rssi,
                     "discovered_at": datetime.now(UTC).isoformat(),
                     "metadata": self._extract_metadata(device),
@@ -150,6 +158,9 @@ class BLEDiscoveryService:
                     ),
                 }
                 self.discovered_devices[device.address] = device_data  # type: ignore[reportAttributeAccessIssue]
+                matched += 1
+
+        self.logger.debug("Matched %d potential battery monitor(s)", matched)
 
         # Only save to storage if not disabled
         if not disable_storage:
@@ -188,39 +199,56 @@ class BLEDiscoveryService:
                     return_adv=True,
                 )
 
+            # Debug counts from this short scan
+            self.logger.debug(
+                "Short scan returned %d item(s)",
+                len(devices) if hasattr(devices, "__len__") else -1,
+            )
+
             # Check if any new devices were found
             new_devices_found = False
+            matched = 0
             for device, advertisement_data in devices.values():
-                if (
-                    hasattr(device, "address")
-                    and hasattr(device, "name")
-                    and self._is_potential_battery_monitor(device)
-                ):
+                # Compose a name from device.name or advertised local_name
+                name = (
+                    getattr(device, "name", None)
+                    or getattr(advertisement_data, "local_name", None)
+                    or ""
+                )
+
+                if hasattr(
+                    device,
+                    "address",
+                ) and self._is_potential_battery_monitor_name(name):
                     device_address = device.address  # type: ignore[reportAttributeAccessIssue]
 
                     # Check if this is a new device
                     if device_address not in devices_before_scan:
                         new_devices_found = True
 
-                        # Extract RSSI, handling MagicMock objects
-                        rssi = getattr(advertisement_data, "rssi", None)
-                        if hasattr(rssi, "_mock_name") or hasattr(
-                            rssi,
-                            "_mock_return_value",
-                        ):
-                            rssi = None  # MagicMock object, use None instead
+                    matched += 1
 
-                        device_data = {
-                            "mac_address": device_address,
-                            "name": device.name or "Unknown",  # type: ignore[reportAttributeAccessIssue]
-                            "rssi": rssi,
-                            "discovered_at": datetime.now(UTC).isoformat(),
-                            "metadata": self._extract_metadata(device),
-                            "advertisement_data": self._extract_advertisement_data(
-                                advertisement_data,
-                            ),
-                        }
-                        self.discovered_devices[device_address] = device_data
+                    # Extract RSSI, handling MagicMock objects
+                    rssi = getattr(advertisement_data, "rssi", None)
+                    if hasattr(rssi, "_mock_name") or hasattr(
+                        rssi,
+                        "_mock_return_value",
+                    ):
+                        rssi = None  # MagicMock object, use None instead
+
+                    device_data = {
+                        "mac_address": device_address,
+                        "name": name or "Unknown",
+                        "rssi": rssi,
+                        "discovered_at": datetime.now(UTC).isoformat(),
+                        "metadata": self._extract_metadata(device),
+                        "advertisement_data": self._extract_advertisement_data(
+                            advertisement_data,
+                        ),
+                    }
+                    self.discovered_devices[device_address] = device_data
+
+            self.logger.debug("Short scan matched %d potential device(s)", matched)
 
             # If new devices found, stop scanning
             if new_devices_found:
@@ -237,9 +265,13 @@ class BLEDiscoveryService:
         return self.discovered_devices
 
     def _is_potential_battery_monitor(self, device: object) -> bool:
-        """Return True if device matches known battery monitor characteristics."""
-        device_name = getattr(device, "name", None)
-        return "BM" in (device_name or "")
+        """Use name-based heuristic; kept for backward compatibility."""
+        device_name = getattr(device, "name", None) or ""
+        return self._is_potential_battery_monitor_name(device_name)
+
+    def _is_potential_battery_monitor_name(self, name: str) -> bool:
+        """Return True if name suggests a supported battery monitor (e.g., BM6, BM2)."""
+        return "BM" in (name or "").upper()
 
     def _extract_metadata(self, device: object) -> dict[str, Any]:
         """Extract additional metadata from a Bleak device."""

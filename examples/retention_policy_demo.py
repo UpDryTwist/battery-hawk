@@ -14,7 +14,7 @@ Usage:
 
 Requirements:
     - InfluxDB server running on localhost:8086
-    - Or set BATTERYHAWK_INFLUXDB_ENABLED=false to run in simulation mode
+    - Or set BATTERYHAWK_SYSTEM_INFLUXDB_ENABLED=false to run in simulation mode
 """
 
 import asyncio

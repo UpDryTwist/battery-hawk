@@ -303,6 +303,21 @@ class MQTTInterface:
 
             client_kwargs["tls_context"] = ssl_context
 
+        # DEBUG: Log all connection parameters including credentials (sensitive!)
+        # Note: This will log sensitive information (username/password). Ensure DEBUG level is used only in safe environments.
+        self.logger.debug(
+            "MQTT connection parameters: hostname=%s, port=%s, keepalive=%s, username=%s, password=%s, tls=%s, ca_cert=%s, cert_file=%s, key_file=%s",
+            broker,
+            port,
+            self._mqtt_config.get("keepalive", 60),
+            username,
+            password,
+            self._mqtt_config.get("tls", False),
+            self._mqtt_config.get("ca_cert"),
+            self._mqtt_config.get("cert_file"),
+            self._mqtt_config.get("key_file"),
+        )
+
         return client_kwargs
 
     async def _attempt_single_connection(self, client_kwargs: dict[str, Any]) -> bool:
@@ -337,8 +352,21 @@ class MQTTInterface:
             task = asyncio.create_task(self._process_message_queue())
             task.add_done_callback(lambda _: None)
 
-        except (MqttError, OSError, TimeoutError):
+        except (MqttError, OSError, TimeoutError) as e:
             self._consecutive_failures += 1
+            # Detailed DEBUG logging for connection failure (includes sensitive info)
+            self.logger.debug(
+                "MQTT single connection attempt failed: error=%r, hostname=%s, port=%s, keepalive=%s, username=%s, password=%s, tls=%s, timeout=%s",
+                e,
+                client_kwargs.get("hostname"),
+                client_kwargs.get("port"),
+                client_kwargs.get("keepalive"),
+                client_kwargs.get("username"),
+                client_kwargs.get("password"),
+                bool(client_kwargs.get("tls_context")),
+                self._reconnection_config.connection_timeout,
+                exc_info=True,
+            )
             raise
         else:
             return True
@@ -393,6 +421,20 @@ class MQTTInterface:
                     return  # Connection successful
             except (MqttError, OSError, TimeoutError) as e:
                 last_error = e
+                # Detailed debug info on failure parameters (sensitive info included)
+                self.logger.debug(
+                    "MQTT connect_with_retry attempt %d/%d failed: error=%r, hostname=%s, port=%s, keepalive=%s, username=%s, password=%s, tls=%s",
+                    attempt + 1,
+                    max_retries + 1,
+                    e,
+                    client_kwargs.get("hostname"),
+                    client_kwargs.get("port"),
+                    client_kwargs.get("keepalive"),
+                    client_kwargs.get("username"),
+                    client_kwargs.get("password"),
+                    bool(client_kwargs.get("tls_context")),
+                    exc_info=True,
+                )
 
                 if attempt < max_retries:
                     if not await self._handle_retry_delay(attempt, max_retries):

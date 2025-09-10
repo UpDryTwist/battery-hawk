@@ -239,6 +239,7 @@ docker-dev-build:
 	@docker compose build --no-cache battery-hawk
 
 docker-dev-clean: docker-dev-build
+	@clear
 	@docker compose up -d
 	@docker compose logs -f
 

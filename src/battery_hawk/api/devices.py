@@ -140,6 +140,11 @@ def format_device_resource(
             "configured_at": device_data.get("configured_at"),
             "polling_interval": device_data.get("polling_interval", 3600),
             "connection_config": device_data.get("connection_config", {}),
+            # Expose latest reading and runtime device status if present
+            "latest_reading": device_data.get("latest_reading"),
+            "last_reading_time": device_data.get("last_reading_time"),
+            "device_status": device_data.get("device_status"),
+            "last_status_update": device_data.get("last_status_update"),
         },
         "links": {"self": f"/api/devices/{mac_address}"},
         "relationships": {

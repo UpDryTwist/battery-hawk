@@ -285,7 +285,7 @@ curl -X PATCH http://localhost:5000/api/system/config \
           "url": "http://influxdb:8086",
           "token": "your-token",
           "org": "your-org",
-          "bucket": "battery-hawk"
+          "bucket": "battery_hawk"
         }
       }
     }

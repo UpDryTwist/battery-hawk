@@ -226,6 +226,29 @@ class BM6Device(BaseMonitorDevice):
                     device_address=self.device_address,
                 )
 
+            # Ensure notifications are active on the BM6 notify characteristic
+            try:
+                health = await self.connection_pool.get_connection_health(
+                    self.device_address,
+                )
+                active_notifs = set(health.get("notification_characteristics", []))
+            except (KeyError, AttributeError, TypeError):
+                # Health info may be missing or partial depending on adapter/platform
+                active_notifs = set()
+
+            if self.notify_characteristic_uuid not in active_notifs:
+                self.logger.info(
+                    "Enabling notifications for BM6 device %s on characteristic %s",
+                    self.device_address,
+                    self.notify_characteristic_uuid,
+                )
+                # Note: Narrow exception handling; allow BLE errors to surface for retry logic.
+                await self.connection_pool.start_notifications(
+                    self.device_address,
+                    self.notify_characteristic_uuid,
+                    self._notification_handler,
+                )
+
             # Clear the data received event
             self._data_received_event.clear()
 
@@ -257,8 +280,15 @@ class BM6Device(BaseMonitorDevice):
                 # Continue with whatever data we have
 
             # Create battery info from the latest parsed data
-            return self._create_battery_info()
-
+            battery_info = self._create_battery_info()
+            self.logger.debug(
+                "BM6 read_data result for device %s: voltage=%.2fV, current=%.2fA, temp=%.1f°C, SoC=%.1f%%",
+                self.device_address,
+                battery_info.voltage or 0.0,
+                battery_info.current or 0.0,
+                battery_info.temperature or 0.0,
+                battery_info.state_of_charge or 0.0,
+            )
         except (BM6ConnectionError, BM6DataParsingError, BM6TimeoutError):
             # Re-raise BM6-specific errors
             raise
@@ -272,6 +302,8 @@ class BM6Device(BaseMonitorDevice):
                 f"Unexpected error during BM6 data reading: {exc}",
                 device_address=self.device_address,
             ) from exc
+        else:
+            return battery_info
 
     async def send_command(
         self,

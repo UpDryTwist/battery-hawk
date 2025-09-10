@@ -936,3 +936,152 @@ class TestInfluxDBErrorHandling:
 
         parsed_temps = json.loads(filtered["temperatures"])
         assert parsed_temps == [25.0, 26.0]
+
+
+@pytest.mark.asyncio
+class TestInfluxDBV2Behavior:
+    """Tests specific to InfluxDB 2.x behavior (org/bucket/token handling)."""
+
+    @patch("battery_hawk.core.storage.InfluxDBClient")
+    @patch("battery_hawk.core.storage.requests")
+    async def test_v2_client_uses_token_and_org(
+        self,
+        mock_requests: Any,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
+        """Ensure v2 client is created with token and org, not username/password."""
+        # Simulate InfluxDB 2.x
+        mock_response = MagicMock()
+        mock_response.headers = {"X-Influxdb-Version": "2.7.12"}
+        mock_requests.get.return_value = mock_response
+
+        # Prepare client mocks
+        mock_client_instance = MagicMock()
+        mock_client_instance.ping = MagicMock()
+        mock_client_instance.write_api.return_value = MagicMock()
+        mock_client_instance.query_api.return_value = MagicMock()
+        mock_influx_client.return_value = mock_client_instance
+
+        # Configure v2-specific settings
+        mock_config_manager.configs["system"]["influxdb"].update(
+            {
+                "token": "test-token",
+                "org": "battery-hawk",
+                "bucket": "test_bucket",
+            },
+        )
+
+        storage = DataStorage(mock_config_manager)
+        await storage.connect()
+
+        # Verify client constructed with token & org
+        called_kwargs = mock_influx_client.call_args.kwargs
+        assert called_kwargs.get("token") == "test-token"
+        assert called_kwargs.get("org") == "battery-hawk"
+        # username/password should not be passed when token/org present
+        assert "username" not in called_kwargs
+        assert "password" not in called_kwargs
+
+        await storage.disconnect()
+
+    @patch("battery_hawk.core.storage.InfluxDBClient")
+    @patch("battery_hawk.core.storage.requests")
+    async def test_v2_query_uses_org_not_database(
+        self,
+        mock_requests: Any,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
+        """get_recent_readings() should pass org to QueryAPI in v2."""
+        # Simulate InfluxDB 2.x
+        mock_response = MagicMock()
+        mock_response.headers = {"X-Influxdb-Version": "2.7.12"}
+        mock_requests.get.return_value = mock_response
+
+        # Prepare client mocks
+        mock_client_instance = MagicMock()
+        mock_query_api = MagicMock()
+        mock_query_api.query = MagicMock(return_value=[])
+        mock_client_instance.ping = MagicMock()
+        mock_client_instance.query_api.return_value = mock_query_api
+        mock_client_instance.write_api.return_value = MagicMock()
+        mock_influx_client.return_value = mock_client_instance
+
+        # Configure v2-specific settings
+        mock_config_manager.configs["system"]["influxdb"].update(
+            {
+                "token": "token",
+                "org": "battery-hawk",
+                "bucket": "test_bucket",
+            },
+        )
+
+        storage = DataStorage(mock_config_manager)
+        await storage.connect()
+
+        # Call method under test
+        _ = await storage.get_recent_readings("AA:BB:CC:DD:EE:FF", limit=5)
+
+        # Assert query called with org as second positional arg
+        assert mock_query_api.query.call_count >= 1
+        args, kwargs = mock_query_api.query.call_args
+        # Expect args like (query_string, "battery-hawk")
+        assert len(args) >= 2
+        assert args[1] == "battery-hawk"
+        # Database should not be passed positionally in v2 path
+
+        await storage.disconnect()
+
+    @patch("battery_hawk.core.storage.InfluxDBClient")
+    @patch("battery_hawk.core.storage.requests")
+    async def test_v2_write_uses_bucket_and_org_named_args(
+        self,
+        mock_requests: Any,
+        mock_influx_client: Any,
+        mock_config_manager: Any,
+    ) -> None:
+        """store_reading() should call write_api.write(bucket=..., org=..., ...)."""
+        # Simulate InfluxDB 2.x
+        mock_response = MagicMock()
+        mock_response.headers = {"X-Influxdb-Version": "2.7.12"}
+        mock_requests.get.return_value = mock_response
+
+        # Prepare client mocks
+        mock_client_instance = MagicMock()
+        mock_write_api = MagicMock()
+        mock_query_api = MagicMock()
+        mock_client_instance.ping = MagicMock()
+        mock_client_instance.write_api.return_value = mock_write_api
+        mock_client_instance.query_api.return_value = mock_query_api
+        mock_influx_client.return_value = mock_client_instance
+
+        # Configure v2-specific settings
+        mock_config_manager.configs["system"]["influxdb"].update(
+            {
+                "token": "token",
+                "org": "battery-hawk",
+                "bucket": "test_bucket",
+            },
+        )
+
+        storage = DataStorage(mock_config_manager)
+        await storage.connect()
+
+        # Perform a write
+        result = await storage.store_reading(
+            "AA:BB:CC:DD:EE:FF",
+            "vehicle_1",
+            "BM6",
+            {"voltage": 12.3, "current": 1.2, "temperature": 22.0},
+        )
+
+        assert result is True
+        assert mock_write_api.write.call_count >= 1
+        _args, wkwargs = mock_write_api.write.call_args
+        # Ensure named args include bucket and org
+        assert wkwargs.get("bucket") == "test_bucket"
+        assert wkwargs.get("org") == "battery-hawk"
+        assert "record" in wkwargs
+
+        await storage.disconnect()

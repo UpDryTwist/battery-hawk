@@ -24,7 +24,7 @@ class BM6Crypto:
 
     def encrypt(self, data: bytes) -> bytes:
         """
-        Encrypt data using AES-CBC mode with zero IV.
+        Encrypt data using AES-ECB mode (no IV), as required by BM6 protocol.
 
         Args:
             data: Data to encrypt (must be exactly 16 bytes for BM6 protocol)
@@ -47,11 +47,11 @@ class BM6Crypto:
                     # Truncate to 16 bytes
                     data = data[:BM6_AES_BLOCK_SIZE]
 
-            # Create AES cipher in CBC mode with zero IV (as used by BM6 protocol)
-            zero_iv = b"\x00" * BM6_AES_BLOCK_SIZE  # 16 bytes of zeros for IV
+            # IMPORTANT: BM6 protocol requires AES-ECB (no IV). Do NOT change to CBC/CTR/etc.
+            # Devices will silently ignore commands if the mode is incorrect.
             cipher = Cipher(
                 algorithms.AES(self.key),
-                modes.CBC(zero_iv),
+                modes.ECB(),  # noqa: S305  # nosec B305 - BM6 protocol requires ECB (device protocol)
                 backend=default_backend(),
             )
             encryptor = cipher.encryptor()
@@ -72,7 +72,7 @@ class BM6Crypto:
 
     def decrypt(self, data: bytes) -> bytes:
         """
-        Decrypt data using AES-CBC mode with zero IV.
+        Decrypt data using AES-ECB mode (no IV), as required by BM6 protocol.
 
         Args:
             data: Data to decrypt (should be 16 bytes for BM6 protocol)
@@ -89,11 +89,11 @@ class BM6Crypto:
                     len(data),
                 )
 
-            # Create AES cipher in CBC mode with zero IV (as used by BM6 protocol)
-            zero_iv = b"\x00" * BM6_AES_BLOCK_SIZE  # 16 bytes of zeros for IV
+            # IMPORTANT: BM6 protocol requires AES-ECB (no IV). Do NOT change to CBC/CTR/etc.
+            # Devices will silently ignore responses if the mode is incorrect.
             cipher = Cipher(
                 algorithms.AES(self.key),
-                modes.CBC(zero_iv),
+                modes.ECB(),  # noqa: S305  # nosec B305 - BM6 protocol requires ECB (device protocol)
                 backend=default_backend(),
             )
             decryptor = cipher.decryptor()

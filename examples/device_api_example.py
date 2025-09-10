@@ -120,7 +120,14 @@ def main() -> None:
         # Example device data
         test_mac = "AA:BB:CC:DD:EE:FF"
 
-        client.get_devices()
+        # 1) List devices and show latest fields if present
+        devices = client.get_devices()
+        if devices.get("data"):
+            first = devices["data"][0]
+            attrs = first.get("attributes", {})
+            logger.info("First device: %s", first.get("id"))
+            logger.info("Latest reading: %s", json.dumps(attrs.get("latest_reading")))
+            logger.info("Device status: %s", json.dumps(attrs.get("device_status")))
 
         # If test device doesn't exist, we'll simulate it being discovered
         # In a real scenario, devices would be discovered via BLE scanning
@@ -142,17 +149,22 @@ def main() -> None:
             )
 
             device = client.get_device(test_mac)
-            device["data"]["attributes"]
+            attrs = device.get("data", {}).get("attributes", {})
+            logger.info("Device %s after update", test_mac)
+            logger.info("Latest reading: %s", json.dumps(attrs.get("latest_reading")))
+            logger.info("Device status: %s", json.dumps(attrs.get("device_status")))
 
             # Uncomment to test deletion
-            # print(f"\n5. Deleting device {test_mac}...")
+            # logger.info("Deleting device %s...", test_mac)
             # success = client.delete_device(test_mac)
             # if success:
-            #     print(f"   ✅ Device {test_mac} deleted successfully")
+            #     logger.info("Device %s deleted successfully", test_mac)
         else:
             pass
 
-        client.get_devices()
+        # 2) Re-list to show any updates
+        devices = client.get_devices()
+        logger.info("Device count: %s", devices.get("meta", {}).get("total"))
 
     except requests.exceptions.ConnectionError:
         pass

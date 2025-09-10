@@ -193,23 +193,27 @@ Battery Hawk uses the `BATTERYHAWK_` prefix for all application environment vari
 
 ```bash
 # API Configuration
-BATTERYHAWK_API_PORT=5000
+BATTERYHAWK_SYSTEM_API_PORT=5000
 
 # Logging Configuration (with timestamps)
-BATTERYHAWK_LOGGING_LEVEL=INFO
-BATTERYHAWK_LOGGING_FILE=/logs/battery_hawk.log
-BATTERYHAWK_LOGGING_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-BATTERYHAWK_LOGGING_DATE_FORMAT="%Y-%m-%d %H:%M:%S"
+BATTERYHAWK_SYSTEM_LOGGING_LEVEL=INFO
+BATTERYHAWK_SYSTEM_LOGGING_FILE=/logs/battery_hawk.log
+BATTERYHAWK_SYSTEM_LOGGING_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+BATTERYHAWK_SYSTEM_LOGGING_DATE_FORMAT="%Y-%m-%d %H:%M:%S"
 
 # Database Configuration
-BATTERYHAWK_INFLUXDB_HOST=influxdb
-BATTERYHAWK_INFLUXDB_PORT=8086
-BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk
+# For InfluxDB 2.x, prefer token+org+bucket and ensure org/bucket match your setup
+BATTERYHAWK_SYSTEM_INFLUXDB_HOST=influxdb
+BATTERYHAWK_SYSTEM_INFLUXDB_PORT=8086
+BATTERYHAWK_SYSTEM_INFLUXDB_DATABASE=battery_hawk
+# BATTERYHAWK_SYSTEM_INFLUXDB_ORG=battery-hawk
+# BATTERYHAWK_SYSTEM_INFLUXDB_BUCKET=battery_hawk
+# BATTERYHAWK_SYSTEM_INFLUXDB_TOKEN=changeme
 
 # MQTT Configuration
-BATTERYHAWK_MQTT_BROKER=mqtt-broker
-BATTERYHAWK_MQTT_PORT=1883
-BATTERYHAWK_MQTT_TOPIC_PREFIX=battery_hawk
+BATTERYHAWK_SYSTEM_MQTT_BROKER=mqtt-broker
+BATTERYHAWK_SYSTEM_MQTT_PORT=1883
+BATTERYHAWK_SYSTEM_MQTT_TOPIC_PREFIX=battery_hawk
 ```
 
 #### Port Configuration
@@ -405,7 +409,7 @@ Enable debug logging for troubleshooting:
 
 ```bash
 # Set debug environment
-echo "BATTERYHAWK_LOGGING_LEVEL=DEBUG" >> .env
+echo "BATTERYHAWK_SYSTEM_LOGGING_LEVEL=DEBUG" >> .env
 
 # Restart services
 docker-compose restart battery-hawk

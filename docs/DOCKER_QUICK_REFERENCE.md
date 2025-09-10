@@ -50,7 +50,7 @@ docker-compose logs -f
 ### Troubleshooting
 ```bash
 # Debug mode
-echo "BATTERYHAWK_LOGGING_LEVEL=DEBUG" >> .env
+echo "BATTERYHAWK_SYSTEM_LOGGING_LEVEL=DEBUG" >> .env
 docker-compose restart battery-hawk
 
 # Check Bluetooth
@@ -102,19 +102,29 @@ battery-hawk/
 
 ### Application Configuration (Required)
 ```bash
-BATTERYHAWK_INFLUXDB_HOST=influxdb
-BATTERYHAWK_INFLUXDB_PORT=8086
-BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk
-BATTERYHAWK_LOGGING_LEVEL=INFO
-BATTERYHAWK_LOGGING_FILE=/logs/battery_hawk.log  # Enables file logging with timestamps
+BATTERYHAWK_SYSTEM_INFLUXDB_HOST=influxdb
+BATTERYHAWK_SYSTEM_INFLUXDB_PORT=8086
+BATTERYHAWK_SYSTEM_INFLUXDB_DATABASE=battery_hawk
+BATTERYHAWK_SYSTEM_LOGGING_LEVEL=INFO
+BATTERYHAWK_SYSTEM_LOGGING_FILE=/logs/battery_hawk.log  # Enables file logging with timestamps
 ```
+
+### InfluxDB 2.x Notes
+- Org often uses a hyphen: e.g., `battery-hawk`
+- Bucket often uses an underscore: e.g., `battery_hawk`
+- A valid token is required for reads/writes; username/password are not used.
+- Recommended envs (if using BATTERYHAWK_ overrides):
+  - `BATTERYHAWK_SYSTEM_INFLUXDB_ORG=battery-hawk`
+  - `BATTERYHAWK_SYSTEM_INFLUXDB_BUCKET=battery_hawk`
+  - `BATTERYHAWK_SYSTEM_INFLUXDB_TOKEN=your_token`
+
 
 ### Application Configuration (Optional)
 ```bash
-BATTERYHAWK_API_PORT=5000
-BATTERYHAWK_MQTT_BROKER=mqtt-broker
-BATTERYHAWK_MQTT_PORT=1883
-BATTERYHAWK_MQTT_TOPIC_PREFIX=battery_hawk
+BATTERYHAWK_SYSTEM_API_PORT=5000
+BATTERYHAWK_SYSTEM_MQTT_BROKER=mqtt-broker
+BATTERYHAWK_SYSTEM_MQTT_PORT=1883
+BATTERYHAWK_SYSTEM_MQTT_TOPIC_PREFIX=battery_hawk
 ```
 
 ### Port Configuration (Host Ports)

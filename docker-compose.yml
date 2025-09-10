@@ -15,16 +15,16 @@ services:
       - ./local-instance/logs:/logs
       - /var/run/dbus:/var/run/dbus:ro  # Read-only access to D-Bus
     environment:
-      - BATTERYHAWK_INFLUXDB_HOST=localhost
-      - BATTERYHAWK_INFLUXDB_PORT=8086
-      - BATTERYHAWK_INFLUXDB_DATABASE=battery_hawk
-      - BATTERYHAWK_INFLUXDB_USERNAME=admin
-      - BATTERYHAWK_INFLUXDB_PASSWORD=admin
-      - BATTERYHAWK_LOGGING_LEVEL=INFO
-      - BATTERYHAWK_API_PORT=5000
-      - BATTERYHAWK_MQTT_BROKER=localhost
-      - BATTERYHAWK_MQTT_PORT=1883
-      - BATTERYHAWK_MQTT_TOPIC_PREFIX=battery_hawk
+      - BATTERYHAWK_SYSTEM_INFLUXDB_HOST=localhost
+      - BATTERYHAWK_SYSTEM_INFLUXDB_PORT=8086
+      - BATTERYHAWK_SYSTEM_INFLUXDB_DATABASE=battery_hawk
+      - BATTERYHAWK_SYSTEM_INFLUXDB_USERNAME=admin
+      - BATTERYHAWK_SYSTEM_INFLUXDB_PASSWORD=admin
+      - BATTERYHAWK_SYSTEM_LOGGING_LEVEL=INFO
+      - BATTERYHAWK_SYSTEM_API_PORT=5000
+      - BATTERYHAWK_SYSTEM_MQTT_BROKER=localhost
+      - BATTERYHAWK_SYSTEM_MQTT_PORT=1883
+      - BATTERYHAWK_SYSTEM_MQTT_TOPIC_PREFIX=battery_hawk
     depends_on:
       - influxdb
       - mqtt-broker
@@ -70,6 +70,30 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
+
+
+  # --- Alternative InfluxDB 2.x service (commented) ---
+  # influxdb:
+  #   image: influxdb:2.7
+  #   container_name: influxdb
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${INFLUXDB_HOST_PORT:-8086}:8086"
+  #   volumes:
+  #     - influxdb-data:/var/lib/influxdb2
+  #   environment:
+  #     - DOCKER_INFLUXDB_INIT_MODE=setup
+  #     - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER:-admin}
+  #     - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD:-changeme}
+  #     - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-battery-hawk}
+  #     - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-battery_hawk}
+  #     - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-changeme}
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
 
   mqtt-broker:
     image: eclipse-mosquitto:2.0

@@ -183,6 +183,51 @@ class DeviceRegistry:
             if device.get("vehicle_id") == vehicle_id
         ]
 
+    async def update_latest_reading(
+        self,
+        mac_address: str,
+        reading: dict[str, Any],
+    ) -> None:
+        """
+        Update and persist the latest reading for a device.
+
+        Args:
+            mac_address: Device MAC address
+            reading: Latest reading dictionary (JSON-serializable)
+        """
+        if mac_address not in self.devices:
+            self.logger.warning(
+                "Attempted to update reading for unknown device: %s",
+                mac_address,
+            )
+            return
+        self.devices[mac_address]["latest_reading"] = reading
+        self.devices[mac_address]["last_reading_time"] = datetime.now(UTC).isoformat()
+        await self._save_devices()
+
+    async def update_device_status(
+        self,
+        mac_address: str,
+        status: dict[str, Any],
+    ) -> None:
+        """
+        Update and persist the runtime device status for a device.
+
+        Args:
+            mac_address: Device MAC address
+            status: Device status dictionary (JSON-serializable)
+        """
+        if mac_address not in self.devices:
+            self.logger.warning(
+                "Attempted to update status for unknown device: %s",
+                mac_address,
+            )
+            return
+        # Store runtime status under a distinct key to avoid clashing with config 'status'
+        self.devices[mac_address]["device_status"] = status
+        self.devices[mac_address]["last_status_update"] = datetime.now(UTC).isoformat()
+        await self._save_devices()
+
     async def remove_device(self, mac_address: str) -> bool:
         """
         Remove a device from the registry.

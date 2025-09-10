@@ -42,6 +42,51 @@ curl http://localhost:5000/api/health
 
 # Or use CLI
 battery-hawk system health
+
+### Switching from InfluxDB 1.8 to 2.7 in Compose
+- The repository’s default docker-compose.yml uses InfluxDB 1.8 for development simplicity.
+- To use InfluxDB 2.x instead:
+  1. Open `docker-compose.yml`
+  2. Comment out the existing `influxdb: 1.8` service
+  3. Uncomment the provided "Alternative InfluxDB 2.x" service block
+  4. Ensure `.env` has `INFLUXDB_ORG`, `INFLUXDB_BUCKET` (often underscore), and `INFLUXDB_TOKEN`
+  5. Recreate the stack: `docker compose down && docker compose up -d`
+- For production examples, see the `influxdb:2.7` service in this guide.
+
+### InfluxDB v2 vs v1.x Differences
+- Authentication:
+  - v1.x: often username/password; database name required
+  - v2.x: token+org; uses buckets instead of databases
+- Query language:
+  - v1.x: InfluxQL
+  - v2.x: Flux (InfluxQL compatibility exists but Flux is preferred)
+- Setup:
+  - v1.x: minimal setup via env vars
+  - v2.x: first-run initialization requires org, bucket, and admin token
+
+### Alternate: Influx CLI Setup for v2
+Instead of DOCKER_INFLUXDB_INIT_* envs, you can set up v2 using the Influx CLI (inside the container):
+
+```bash
+# Exec into the InfluxDB 2.x container
+docker exec -it influxdb bash
+
+# Run setup interactively (or pass flags non-interactively)
+influx setup \
+  --username "$INFLUXDB_ADMIN_USER" \
+  --password "$INFLUXDB_ADMIN_PASSWORD" \
+  --org "$INFLUXDB_ORG" \
+  --bucket "$INFLUXDB_BUCKET" \
+  --retention 30d \
+  --token "$INFLUXDB_TOKEN" \
+  --force
+
+# Verify
+influx auth list
+influx bucket list
+```
+
+
 ```
 
 ### Production Configuration
@@ -65,8 +110,9 @@ LOG_FILE=/var/log/battery-hawk/battery-hawk.log
 INFLUXDB_ENABLED=true
 INFLUXDB_URL=http://influxdb:8086
 INFLUXDB_TOKEN=your-influxdb-token
+# NOTE: Org often uses a hyphen; bucket often uses an underscore
 INFLUXDB_ORG=your-organization
-INFLUXDB_BUCKET=battery-hawk
+INFLUXDB_BUCKET=battery_hawk
 INFLUXDB_RETENTION=30d
 
 # MQTT
@@ -114,9 +160,13 @@ services:
     ports:
       - "8086:8086"
     environment:
-      - INFLUXDB_DB=battery-hawk
-      - INFLUXDB_ADMIN_USER=admin
-      - INFLUXDB_ADMIN_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      # InfluxDB 2.x setup via env vars (first-run initialization)
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - ./influxdb/config:/etc/influxdb2

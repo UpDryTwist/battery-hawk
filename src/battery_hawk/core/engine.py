@@ -447,6 +447,9 @@ class BatteryHawkCore:
                             )
                             self.active_devices[mac_address] = device
 
+                            # Establish BLE connection and set up notifications
+                            await device.connect()
+
                             # Update connection state
                             await self.state_manager.update_connection_state(
                                 mac_address,
@@ -540,11 +543,44 @@ class BatteryHawkCore:
                 # Update device reading in state manager
                 await self.state_manager.update_device_reading(mac_address, reading)
 
+                # Also persist latest reading on the device object for API/persistence
+                reading_dict_for_device = {
+                    "voltage": getattr(reading, "voltage", None),
+                    "current": getattr(reading, "current", None),
+                    "temperature": getattr(reading, "temperature", None),
+                    "state_of_charge": getattr(reading, "state_of_charge", None),
+                    "capacity": getattr(reading, "capacity", None),
+                    "cycles": getattr(reading, "cycles", None),
+                    "timestamp": getattr(reading, "timestamp", None),
+                    "extra": getattr(reading, "extra", {}),
+                }
+                await self.device_registry.update_latest_reading(
+                    mac_address,
+                    reading_dict_for_device,
+                )
+
                 # Update device status
                 device_status = await device.send_command("status")
                 await self.state_manager.update_device_status(
                     mac_address,
                     device_status,
+                )
+
+                # Persist device status on the device object as well
+                status_dict_for_device = {
+                    "connected": getattr(device_status, "connected", None),
+                    "error_code": getattr(device_status, "error_code", None),
+                    "error_message": getattr(device_status, "error_message", None),
+                    "protocol_version": getattr(
+                        device_status,
+                        "protocol_version",
+                        None,
+                    ),
+                    "last_command": getattr(device_status, "last_command", None),
+                }
+                await self.device_registry.update_device_status(
+                    mac_address,
+                    status_dict_for_device,
                 )
 
             except (OSError, ConnectionError, TimeoutError) as e:

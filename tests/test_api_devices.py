@@ -33,6 +33,26 @@ class MockDeviceRegistry:
                     "retry_interval": 60,
                     "reconnection_delay": 300,
                 },
+                # New persisted runtime fields
+                "latest_reading": {
+                    "voltage": 12.6,
+                    "current": 1.2,
+                    "temperature": 25.0,
+                    "state_of_charge": 85.0,
+                    "capacity": 50.0,
+                    "cycles": 10,
+                    "timestamp": 1234567890.0,
+                    "extra": {"device_type": "BM6"},
+                },
+                "last_reading_time": "2025-01-01T10:30:00Z",
+                "device_status": {
+                    "connected": True,
+                    "error_code": None,
+                    "error_message": None,
+                    "protocol_version": "1.0",
+                    "last_command": "status",
+                },
+                "last_status_update": "2025-01-01T10:30:01Z",
             },
         }
 
@@ -163,6 +183,11 @@ class TestDeviceEndpoints:
         assert device["id"] == "AA:BB:CC:DD:EE:FF"
         assert device["attributes"]["device_type"] == "BM6"
         assert device["attributes"]["friendly_name"] == "Test Device"
+        # New: verify latest_reading and device_status in list response item
+        attrs_list = device["attributes"]
+        assert "latest_reading" in attrs_list
+        assert attrs_list["latest_reading"]["voltage"] == 12.6
+        assert attrs_list["device_status"]["connected"] is True
 
     def test_get_device_found(self, client: Any) -> None:
         """Test GET /api/devices/{mac} endpoint for existing device."""
@@ -176,6 +201,11 @@ class TestDeviceEndpoints:
         assert device["type"] == "devices"
         assert device["id"] == "AA:BB:CC:DD:EE:FF"
         assert device["attributes"]["device_type"] == "BM6"
+        # New: verify latest_reading and device_status on single device response
+        attrs = device["attributes"]
+        assert "latest_reading" in attrs
+        assert attrs["latest_reading"]["temperature"] == 25.0
+        assert attrs["device_status"]["connected"] is True
 
     def test_get_device_not_found(self, client: Any) -> None:
         """Test GET /api/devices/{mac} endpoint for non-existing device."""

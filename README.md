@@ -136,11 +136,13 @@ BLUETOOTH_MAX_CONCURRENT_CONNECTIONS=5
 BLUETOOTH_SCAN_DURATION=10
 
 # InfluxDB Configuration (optional)
+# NOTE: Org often uses a hyphen, bucket often uses an underscore.
+# Example: ORG=battery-hawk, BUCKET=battery_hawk
 INFLUXDB_ENABLED=true
 INFLUXDB_URL=http://localhost:8086
 INFLUXDB_TOKEN=your-influxdb-token
 INFLUXDB_ORG=your-org
-INFLUXDB_BUCKET=battery-hawk
+INFLUXDB_BUCKET=battery_hawk
 
 # MQTT Configuration (optional)
 MQTT_ENABLED=true
@@ -183,8 +185,8 @@ influxdb:
   enabled: true
   url: "http://localhost:8086"
   token: "your-influxdb-token"
-  org: "your-org"
-  bucket: "battery-hawk"
+  org: "your-org"        # often hyphenated, e.g., battery-hawk
+  bucket: "battery_hawk"  # often underscored, e.g., battery_hawk
   retention_policy: "30d"
 
 mqtt:
