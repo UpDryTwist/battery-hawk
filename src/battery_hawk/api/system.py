@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
+from flasgger import swag_from
 from flask import Flask, request
 
 if TYPE_CHECKING:
@@ -192,6 +193,35 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
     """
 
     @app.route("/api/system/config", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["System"],
+            "summary": "Get system configuration",
+            "responses": {
+                "200": {
+                    "description": "System config",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["system-config"],
+                                    },
+                                    "id": {"type": "string"},
+                                    "attributes": {
+                                        "$ref": "#/definitions/SystemConfig",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    )
     def get_system_config() -> tuple[dict[str, Any], int]:
         """
         Get current system configuration.
@@ -216,6 +246,64 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/system/config", methods=["PATCH"])
+    @swag_from(
+        {
+            "tags": ["System"],
+            "summary": "Update system configuration",
+            "parameters": [
+                {
+                    "name": "body",
+                    "in": "body",
+                    "required": True,
+                    "schema": {
+                        "type": "object",
+                        "required": ["data"],
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "required": ["type", "attributes"],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["system-config"],
+                                    },
+                                    "id": {"type": "string"},
+                                    "attributes": {
+                                        "$ref": "#/definitions/SystemConfig",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Updated system config",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["system-config"],
+                                    },
+                                    "id": {"type": "string"},
+                                    "attributes": {
+                                        "$ref": "#/definitions/SystemConfig",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                "400": {"$ref": "#/responses/400"},
+                "409": {"$ref": "#/responses/409"},
+            },
+        },
+    )
     def update_system_config() -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update system configuration.
@@ -337,6 +425,35 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/system/status", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["System"],
+            "summary": "Get system status",
+            "responses": {
+                "200": {
+                    "description": "System status",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["system-status"],
+                                    },
+                                    "id": {"type": "string"},
+                                    "attributes": {
+                                        "$ref": "#/definitions/SystemStatus",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    )
     def get_system_status() -> tuple[dict[str, Any], int]:
         """
         Get current system status.
@@ -414,6 +531,34 @@ def setup_system_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/system/health", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["System"],
+            "summary": "System health check",
+            "responses": {
+                "200": {
+                    "description": "System health (healthy)",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["system-health"],
+                                    },
+                                    "id": {"type": "string"},
+                                    "attributes": {"type": "object"},
+                                },
+                            },
+                        },
+                    },
+                },
+                "503": {"description": "System health (unhealthy)"},
+            },
+        },
+    )
     def get_system_health() -> tuple[dict[str, Any], int]:
         """
         Get system health check.

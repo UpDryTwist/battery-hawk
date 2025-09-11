@@ -252,6 +252,33 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Devices"],
+            "summary": "Get a device",
+            "parameters": [
+                {
+                    "name": "mac_address",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                    "description": "Device MAC address",
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Device details",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/DeviceResource"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def get_device(mac_address: str) -> tuple[dict[str, Any], int]:
         """
         Get specific device by MAC address.
@@ -315,7 +342,7 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
                 },
             ],
             "responses": {
-                "201": {
+                "200": {
                     "description": "Device configured successfully",
                     "schema": {
                         "type": "object",
@@ -397,6 +424,54 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["PATCH"])
+    @swag_from(
+        {
+            "tags": ["Devices"],
+            "summary": "Update a device",
+            "consumes": ["application/vnd.api+json"],
+            "parameters": [
+                {
+                    "name": "mac_address",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+                {
+                    "name": "body",
+                    "in": "body",
+                    "required": True,
+                    "schema": {
+                        "type": "object",
+                        "required": ["data"],
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["devices"]},
+                                    "attributes": {
+                                        "$ref": "#/definitions/DeviceAttributes",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Device updated",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/DeviceResource"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+                "409": {"$ref": "#/responses/409"},
+            },
+        },
+    )
     def update_device(mac_address: str) -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update an existing device.
@@ -486,6 +561,24 @@ def setup_device_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # no
             return response, 200
 
     @app.route("/api/devices/<mac_address>", methods=["DELETE"])
+    @swag_from(
+        {
+            "tags": ["Devices"],
+            "summary": "Delete a device",
+            "parameters": [
+                {
+                    "name": "mac_address",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+            ],
+            "responses": {
+                "204": {"description": "Device deleted"},
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def delete_device(mac_address: str) -> tuple[dict[str, Any], int]:
         """
         Delete a device.

@@ -12,6 +12,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
+from flasgger import swag_from
 from flask import Flask, request
 from flask_cors import CORS
 from flask_marshmallow import Marshmallow
@@ -186,6 +187,18 @@ class BatteryHawkAPI:
         """
 
         @self.app.route("/api/health", methods=["GET"])
+        @swag_from(
+            {
+                "tags": ["General"],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "Service health status",
+                        "schema": {"$ref": "#/definitions/HealthResponse"},
+                    },
+                },
+            },
+        )
         def health_check() -> dict[str, Any]:
             """Health check endpoint."""
             return {
@@ -195,6 +208,18 @@ class BatteryHawkAPI:
             }
 
         @self.app.route("/api/version", methods=["GET"])
+        @swag_from(
+            {
+                "tags": ["General"],
+                "summary": "Version information",
+                "responses": {
+                    "200": {
+                        "description": "API and core versions",
+                        "schema": {"$ref": "#/definitions/VersionResponse"},
+                    },
+                },
+            },
+        )
         def version_info() -> dict[str, Any]:
             """Version information endpoint."""
             return {

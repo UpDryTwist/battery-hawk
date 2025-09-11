@@ -598,29 +598,29 @@ class TestCLIScan:
 
 def test_cli_scan_command_basic(temp_config_dir: str) -> None:
     """Test basic CLI scan command."""
-    exit_code, stdout, stderr = run_cli(["scan"], temp_config_dir)
+    exit_code, _stdout, _stderr = run_cli(["scan"], temp_config_dir)
     assert exit_code == 0
 
 
 def test_cli_scan_command_with_duration(temp_config_dir: str) -> None:
     """Test CLI scan command with custom duration."""
-    exit_code, stdout, stderr = run_cli(["scan", "--duration", "5"], temp_config_dir)
+    exit_code, _stdout, _stderr = run_cli(["scan", "--duration", "5"], temp_config_dir)
     assert exit_code == 0
 
 
 def test_cli_scan_command_json_format(temp_config_dir: str) -> None:
     """Test CLI scan command with JSON format."""
-    exit_code, stdout, stderr = run_cli(["scan", "--format", "json"], temp_config_dir)
+    exit_code, _stdout, _stderr = run_cli(["scan", "--format", "json"], temp_config_dir)
     assert exit_code == 0
 
 
 def test_cli_scan_command_with_connect(temp_config_dir: str) -> None:
     """Test CLI scan command with connect option."""
-    exit_code, stdout, stderr = run_cli(["scan", "--connect"], temp_config_dir)
+    exit_code, _stdout, _stderr = run_cli(["scan", "--connect"], temp_config_dir)
     assert exit_code == 0
 
 
 def test_cli_scan_command_help(temp_config_dir: str) -> None:
     """Test CLI scan command help."""
-    exit_code, stdout, stderr = run_cli(["scan", "--help"], temp_config_dir)
+    exit_code, _stdout, _stderr = run_cli(["scan", "--help"], temp_config_dir)
     assert exit_code == 0

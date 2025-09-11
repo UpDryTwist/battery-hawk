@@ -173,6 +173,62 @@ class TestMQTTPublisher:
         assert "timestamp" in payload
 
     @pytest.mark.asyncio
+    async def test_publish_device_status_includes_flat_and_nested_reading(
+        self,
+        publisher: MQTTPublisher,
+        mock_mqtt_interface: MQTTInterface,
+        sample_battery_info: BatteryInfo,
+        sample_device_status: DeviceStatus,
+    ) -> None:
+        """Status payload should include reading fields both flattened and nested."""
+        device_id = "AA:BB:CC:DD:EE:FF"
+
+        await publisher.publish_device_status(
+            device_id,
+            sample_device_status,
+            device_type="BM2",
+            vehicle_id="veh123",
+            reading=sample_battery_info,
+        )
+
+        mock_mqtt_interface.publish.assert_called_once()
+        args, kwargs = mock_mqtt_interface.publish.call_args
+        assert args[0] == f"device/{device_id}/status"
+        assert kwargs["retain"] is True
+
+        payload = args[1]
+        # Top-level fields
+        assert payload["device_id"] == device_id
+        assert payload["vehicle_id"] == "veh123"
+        assert payload["device_type"] == "BM2"
+        assert payload["connected"] is True
+        # Flattened reading fields
+        assert payload["voltage"] == sample_battery_info.voltage
+        assert payload["current"] == sample_battery_info.current
+        assert payload["temperature"] == sample_battery_info.temperature
+        assert payload["state_of_charge"] == sample_battery_info.state_of_charge
+        assert payload["capacity"] == sample_battery_info.capacity
+        assert payload["cycles"] == sample_battery_info.cycles
+        assert (
+            payload["power"]
+            == sample_battery_info.voltage * sample_battery_info.current
+        )
+        assert payload["reading_extra"] == sample_battery_info.extra
+        # Nested latest_reading snapshot
+        nested = payload["latest_reading"]
+        assert nested["voltage"] == sample_battery_info.voltage
+        assert nested["current"] == sample_battery_info.current
+        assert nested["temperature"] == sample_battery_info.temperature
+        assert nested["state_of_charge"] == sample_battery_info.state_of_charge
+        assert nested["capacity"] == sample_battery_info.capacity
+        assert nested["cycles"] == sample_battery_info.cycles
+        assert (
+            nested["power"] == sample_battery_info.voltage * sample_battery_info.current
+        )
+        assert nested["extra"] == sample_battery_info.extra
+        assert nested["timestamp"] == sample_battery_info.timestamp
+
+    @pytest.mark.asyncio
     async def test_publish_device_status_disconnected_with_error(
         self,
         publisher: MQTTPublisher,

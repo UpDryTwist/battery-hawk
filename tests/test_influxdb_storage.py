@@ -1025,7 +1025,7 @@ class TestInfluxDBV2Behavior:
 
         # Assert query called with org as second positional arg
         assert mock_query_api.query.call_count >= 1
-        args, kwargs = mock_query_api.query.call_args
+        args, _kwargs = mock_query_api.query.call_args
         # Expect args like (query_string, "battery-hawk")
         assert len(args) >= 2
         assert args[1] == "battery-hawk"

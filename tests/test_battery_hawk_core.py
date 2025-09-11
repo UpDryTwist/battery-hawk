@@ -615,7 +615,7 @@ class TestBatteryHawkCore:
         )
 
         # Verify the device was polled with correct arguments
-        first_call_args, first_call_kwargs = poll_calls[0]
+        first_call_args, _first_call_kwargs = poll_calls[0]
         assert first_call_args[0] == "AA:BB:CC:DD:EE:FF"
         assert first_call_args[1] == mock_device_info
 

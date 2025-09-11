@@ -103,7 +103,7 @@ class TestConfigManager:
 
 def test_cli_list_sections(temp_config_dir: str) -> None:
     """Test CLI list command for config sections."""
-    code, out, err = run_cli(["list"], temp_config_dir)
+    code, out, _err = run_cli(["list"], temp_config_dir)
     assert code == 0
     for section in ["system", "devices", "vehicles"]:
         assert section in out
@@ -111,7 +111,7 @@ def test_cli_list_sections(temp_config_dir: str) -> None:
 
 def test_cli_show_section(temp_config_dir: str) -> None:
     """Test CLI show command for config section."""
-    code, out, err = run_cli(["show", "system"], temp_config_dir)
+    code, out, _err = run_cli(["show", "system"], temp_config_dir)
     assert code == 0
     assert "version" in out
     assert "logging" in out
@@ -120,31 +120,31 @@ def test_cli_show_section(temp_config_dir: str) -> None:
 def test_cli_set_and_show_value(temp_config_dir: str) -> None:
     """Test CLI set and show value commands."""
     # Set a value
-    code, out, err = run_cli(
+    code, out, _err = run_cli(
         ["set", "system", "logging", "level", '"ERROR"'],
         temp_config_dir,
     )
     assert code == 0
     # Save
-    code, out, err = run_cli(["save", "system"], temp_config_dir)
+    code, out, _err = run_cli(["save", "system"], temp_config_dir)
     assert code == 0
     # Show
-    code, out, err = run_cli(["show", "system", "logging", "level"], temp_config_dir)
+    code, out, _err = run_cli(["show", "system", "logging", "level"], temp_config_dir)
     assert code == 0
     assert "ERROR" in out
 
 
 def test_cli_show_invalid_section(temp_config_dir: str) -> None:
     """Test CLI show command for invalid section."""
-    code, out, err = run_cli(["show", "notasection"], temp_config_dir)
+    code, _out, err = run_cli(["show", "notasection"], temp_config_dir)
     assert code == 1
     assert "Error" in err
 
 
 def test_cli_set_invalid_key(temp_config_dir: str) -> None:
     """Test CLI set command for invalid key."""
-    code, out, err = run_cli(["set", "system", "notakey", '"foo"'], temp_config_dir)
+    code, _out, _err = run_cli(["set", "system", "notakey", '"foo"'], temp_config_dir)
     assert code == 0  # Setting a new key is allowed
-    code, out, err = run_cli(["show", "system", "notakey"], temp_config_dir)
+    code, out, _err = run_cli(["show", "system", "notakey"], temp_config_dir)
     assert code == 0
     assert "foo" in out

@@ -168,24 +168,16 @@ class MQTTService:
             self.logger.exception("Error stopping MQTT service")
 
     async def _register_core_event_handlers(self) -> None:
-        """Register MQTT event handlers with the core engine."""
+        """Register MQTT event and state handlers with the core engine/state manager."""
         if not self.core_engine or not self.mqtt_event_handler:
             return
 
-        # Register handlers for core events
-        event_mappings = {
-            "device.discovered": self.mqtt_event_handler.on_device_discovered,
-            "device.reading": self.mqtt_event_handler.on_device_reading,
-            "device.status_change": self.mqtt_event_handler.on_device_status_change,
-            "device.connection_change": self.mqtt_event_handler.on_device_connection_change,
-            "vehicle.associated": self.mqtt_event_handler.on_vehicle_associated,
-            "system.shutdown": self.mqtt_event_handler.on_system_shutdown,
-            "system.status_change": self.mqtt_event_handler.on_system_status_change,
-        }
-
-        for event_name, handler in event_mappings.items():
-            self.core_engine.add_event_handler(event_name, handler)
-            self.logger.debug("Registered MQTT handler for event: %s", event_name)
+        # Delegate to the consolidated registration method that wires both
+        # core engine events and state manager change subscriptions.
+        self.mqtt_event_handler.register_all_handlers()
+        self.logger.debug(
+            "Registered MQTT event handlers via MQTTEventHandler.register_all_handlers()",
+        )
 
     async def _unregister_core_event_handlers(self) -> None:
         """Unregister MQTT event handlers from the core engine."""

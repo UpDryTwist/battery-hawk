@@ -1039,20 +1039,100 @@ class MQTTPublisher:
             )
             raise
 
+    def _build_reading_components(
+        self,
+        reading: BatteryInfo | dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """
+        Build flattened and nested reading components for status payload.
+
+        Returns a tuple of (flat_fields, nested_snapshot).
+        """
+        if isinstance(reading, dict):
+            v = reading.get("voltage")
+            c = reading.get("current")
+            t = reading.get("temperature")
+            soc = reading.get("state_of_charge")
+            cap = reading.get("capacity")
+            cyc = reading.get("cycles")
+            r_ts = reading.get("timestamp")
+            extra = reading.get("extra")
+        else:
+            v = reading.voltage
+            c = reading.current
+            t = reading.temperature
+            soc = reading.state_of_charge
+            cap = getattr(reading, "capacity", None)
+            cyc = getattr(reading, "cycles", None)
+            r_ts = getattr(reading, "timestamp", None)
+            extra = getattr(reading, "extra", None)
+
+        flat: dict[str, Any] = {
+            "voltage": v,
+            "current": c,
+            "temperature": t,
+            "state_of_charge": soc,
+        }
+        if cap is not None:
+            flat["capacity"] = cap
+        if cyc is not None:
+            flat["cycles"] = cyc
+        if extra:
+            flat["reading_extra"] = extra
+        if (
+            v is not None
+            and c is not None
+            and isinstance(v, (int, float))
+            and isinstance(c, (int, float))
+        ):
+            flat["power"] = v * c
+
+        nested: dict[str, Any] = {
+            "voltage": v,
+            "current": c,
+            "temperature": t,
+            "state_of_charge": soc,
+        }
+        if cap is not None:
+            nested["capacity"] = cap
+        if cyc is not None:
+            nested["cycles"] = cyc
+        if extra:
+            nested["extra"] = extra
+        if r_ts is not None:
+            nested["timestamp"] = r_ts
+        if (
+            v is not None
+            and c is not None
+            and isinstance(v, (int, float))
+            and isinstance(c, (int, float))
+        ):
+            nested["power"] = v * c
+
+        return flat, nested
+
     async def publish_device_status(
         self,
         device_id: str,
         status: DeviceStatus,
         *,
         device_type: str | None = None,
+        vehicle_id: str | None = None,
+        reading: BatteryInfo | dict[str, Any] | None = None,
     ) -> None:
         """
         Publish device status change.
+
+        The retained device status payload also includes the latest known reading
+        values when provided, so that subscribers to the status topic can obtain the
+        most recent battery metrics without separately fetching the readings stream.
 
         Args:
             device_id: Device MAC address or identifier.
             status: Device status information.
             device_type: Optional device type (e.g., "BM2", "BM6").
+            vehicle_id: Optional vehicle id if associated.
+            reading: Optional latest reading to embed in the status payload.
 
         Raises:
             MQTTConnectionError: If not connected to broker.
@@ -1061,7 +1141,7 @@ class MQTTPublisher:
         topic = f"device/{device_id}/status"
 
         # Build payload with status data
-        payload = {
+        payload: dict[str, Any] = {
             "device_id": device_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "connected": status.connected,
@@ -1078,8 +1158,17 @@ class MQTTPublisher:
             payload["last_command"] = status.last_command
         if device_type:
             payload["device_type"] = device_type
+        if vehicle_id:
+            payload["vehicle_id"] = vehicle_id
         if status.extra:
             payload["extra"] = status.extra
+
+        # If a latest reading is provided, embed key reading values in the status
+        if reading is not None:
+            # Build flattened and nested components safely
+            flat, nested = self._build_reading_components(reading)
+            payload.update(flat)
+            payload["latest_reading"] = nested
 
         try:
             # Use QoS 1 for status changes (important)
@@ -1090,9 +1179,17 @@ class MQTTPublisher:
                 device_id,
                 status.connected,
             )
-        except Exception:
+        except MQTTConnectionError:
+            # Keep original exception type for callers that distinguish connection issues
             self.logger.exception(
                 "Failed to publish device status for %s",
+                device_id,
+            )
+            raise
+        except Exception:
+            # Narrow generic exceptions: log and re-raise to surface unexpected issues
+            self.logger.exception(
+                "Unexpected error publishing device status for %s",
                 device_id,
             )
             raise
@@ -1405,6 +1502,16 @@ class MQTTEventHandler:
                 device_type=device_type,
             )
 
+            # Also update retained status with the latest reading snapshot
+            await self.mqtt_publisher.publish_device_status(
+                device_id=mac_address,
+                status=new_state.device_status
+                or DeviceStatus(connected=new_state.connected),
+                device_type=device_type,
+                vehicle_id=vehicle_id,
+                reading=new_state.latest_reading,
+            )
+
             # Update vehicle summary if device is associated with a vehicle
             if vehicle_id:
                 await self._update_vehicle_summary(vehicle_id)
@@ -1438,11 +1545,17 @@ class MQTTEventHandler:
 
             device_type = new_state.device_type
 
-            # Publish device status
+            # Publish device status, including latest reading and vehicle when available
+            extra_kwargs: dict[str, Any] = {"device_type": device_type}
+            if new_state.vehicle_id:
+                extra_kwargs["vehicle_id"] = new_state.vehicle_id
+            if new_state.latest_reading:
+                extra_kwargs["reading"] = new_state.latest_reading
+
             await self.mqtt_publisher.publish_device_status(
                 device_id=mac_address,
                 status=new_state.device_status,
-                device_type=device_type,
+                **extra_kwargs,
             )
 
             # Update vehicle summary if device is associated with a vehicle

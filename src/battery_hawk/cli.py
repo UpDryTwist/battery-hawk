@@ -1582,7 +1582,8 @@ async def start_service(  # noqa: PLR0915
             logger.info("API server initialized")
 
         if enable_mqtt:
-            mqtt_service = MQTTService(config_manager)
+            # Pass core_engine so MQTT can register event and state handlers
+            mqtt_service = MQTTService(config_manager, core_engine)
             if mqtt_service.enabled:
                 logger.info("MQTT service initialized")
             else:

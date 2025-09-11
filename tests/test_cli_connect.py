@@ -559,7 +559,7 @@ class TestCLIConnect:
 
 def test_cli_connect_command_basic(temp_config_dir: str) -> None:
     """Test basic connect command."""
-    exit_code, stdout, stderr = run_cli(
+    exit_code, stdout, _stderr = run_cli(
         ["connect", "--device-type", "BM6", "AA:BB:CC:DD:EE:FF"],
         temp_config_dir,
     )
@@ -570,7 +570,7 @@ def test_cli_connect_command_basic(temp_config_dir: str) -> None:
 
 def test_cli_connect_command_with_device_type(temp_config_dir: str) -> None:
     """Test connect command with device type."""
-    exit_code, stdout, stderr = run_cli(
+    exit_code, stdout, _stderr = run_cli(
         ["connect", "--device-type", "BM6", "AA:BB:CC:DD:EE:FF"],
         temp_config_dir,
     )
@@ -581,7 +581,7 @@ def test_cli_connect_command_with_device_type(temp_config_dir: str) -> None:
 
 def test_cli_connect_command_with_timeout(temp_config_dir: str) -> None:
     """Test connect command with timeout."""
-    exit_code, stdout, stderr = run_cli(
+    exit_code, stdout, _stderr = run_cli(
         ["connect", "--device-type", "BM6", "--timeout", "10", "AA:BB:CC:DD:EE:FF"],
         temp_config_dir,
     )
@@ -592,7 +592,7 @@ def test_cli_connect_command_with_timeout(temp_config_dir: str) -> None:
 
 def test_cli_connect_command_with_retry_options(temp_config_dir: str) -> None:
     """Test connect command with retry options."""
-    exit_code, stdout, stderr = run_cli(
+    exit_code, stdout, _stderr = run_cli(
         [
             "connect",
             "--device-type",
@@ -612,7 +612,7 @@ def test_cli_connect_command_with_retry_options(temp_config_dir: str) -> None:
 
 def test_cli_connect_command_json_format(temp_config_dir: str) -> None:
     """Test connect command with JSON format."""
-    exit_code, stdout, stderr = run_cli(
+    exit_code, stdout, _stderr = run_cli(
         ["connect", "--device-type", "BM6", "--format", "json", "AA:BB:CC:DD:EE:FF"],
         temp_config_dir,
     )
@@ -623,7 +623,7 @@ def test_cli_connect_command_json_format(temp_config_dir: str) -> None:
 
 def test_cli_connect_command_help(temp_config_dir: str) -> None:
     """Test connect command help."""
-    exit_code, stdout, stderr = run_cli(["connect", "--help"], temp_config_dir)
+    exit_code, stdout, _stderr = run_cli(["connect", "--help"], temp_config_dir)
     assert exit_code == 0
     assert "Connect to a specific BM6 or BM2 device by MAC address" in stdout
 

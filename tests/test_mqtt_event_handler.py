@@ -264,11 +264,11 @@ class TestMQTTEventHandler:
         # Check if it's a call object or tuple
         if hasattr(call, "args") and hasattr(call, "kwargs"):
             # It's a call object
-            args = call.args
+            _args = call.args
             kwargs = call.kwargs
         else:
             # It's a tuple
-            args, kwargs = call
+            _args, kwargs = call
 
         # The method is called with keyword arguments only
         device_id_arg = kwargs.get("device_id")
@@ -381,7 +381,7 @@ class TestMQTTEventHandler:
 
         # Verify vehicle summary was published
         mock_mqtt_publisher.publish_vehicle_summary.assert_called_once()
-        args, kwargs = mock_mqtt_publisher.publish_vehicle_summary.call_args
+        args, _kwargs = mock_mqtt_publisher.publish_vehicle_summary.call_args
 
         assert args[0] == vehicle_id
         summary_data = args[1]

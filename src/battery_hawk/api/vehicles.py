@@ -12,6 +12,7 @@ import concurrent.futures
 import logging
 from typing import TYPE_CHECKING, Any
 
+from flasgger import swag_from
 from flask import Flask, request
 
 if TYPE_CHECKING:
@@ -177,6 +178,27 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
     """
 
     @app.route("/api/vehicles", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "Get all vehicles",
+            "responses": {
+                "200": {
+                    "description": "List of vehicles",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "array",
+                                "items": {"$ref": "#/definitions/VehicleResource"},
+                            },
+                            "meta": {"$ref": "#/definitions/PaginationMeta"},
+                        },
+                    },
+                },
+            },
+        },
+    )
     def get_vehicles() -> tuple[dict[str, Any], int]:
         """
         Get all vehicles.
@@ -213,6 +235,32 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
             return response, 200
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "Get a vehicle",
+            "parameters": [
+                {
+                    "name": "vehicle_id",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Vehicle details",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/VehicleResource"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def get_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:
         """
         Get specific vehicle by ID.
@@ -248,6 +296,48 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
             return response, 200
 
     @app.route("/api/vehicles", methods=["POST"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "Create a vehicle",
+            "consumes": ["application/json"],
+            "parameters": [
+                {
+                    "name": "body",
+                    "in": "body",
+                    "required": True,
+                    "schema": {
+                        "type": "object",
+                        "required": ["data"],
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "required": ["type", "attributes"],
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["vehicles"]},
+                                    "attributes": {
+                                        "$ref": "#/definitions/VehicleAttributes",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+            "responses": {
+                "201": {
+                    "description": "Vehicle created",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/VehicleResource"},
+                        },
+                    },
+                },
+                "400": {"$ref": "#/responses/400"},
+            },
+        },
+    )
     def create_vehicle() -> tuple[dict[str, Any], int]:
         """
         Create a new vehicle.
@@ -295,6 +385,53 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
             return response, 201
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["PATCH"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "Update a vehicle",
+            "parameters": [
+                {
+                    "name": "vehicle_id",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+                {
+                    "name": "body",
+                    "in": "body",
+                    "required": True,
+                    "schema": {
+                        "type": "object",
+                        "required": ["data"],
+                        "properties": {
+                            "data": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string", "enum": ["vehicles"]},
+                                    "attributes": {
+                                        "$ref": "#/definitions/VehicleAttributes",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Vehicle updated",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/VehicleResource"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+                "409": {"$ref": "#/responses/409"},
+            },
+        },
+    )
     def update_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:  # noqa: PLR0911
         """
         Update an existing vehicle.
@@ -374,6 +511,25 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
             return response, 200
 
     @app.route("/api/vehicles/<vehicle_id>", methods=["DELETE"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "Delete a vehicle",
+            "parameters": [
+                {
+                    "name": "vehicle_id",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+            ],
+            "responses": {
+                "204": {"description": "Vehicle deleted"},
+                "404": {"$ref": "#/responses/404"},
+                "409": {"$ref": "#/responses/409"},
+            },
+        },
+    )
     def delete_vehicle(vehicle_id: str) -> tuple[dict[str, Any], int]:
         """
         Delete a vehicle.
@@ -423,6 +579,35 @@ def setup_vehicle_routes(app: Flask, core_engine: BatteryHawkCore) -> None:  # n
             return {}, 204
 
     @app.route("/api/vehicles/<vehicle_id>/devices", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Vehicles"],
+            "summary": "List a vehicle's devices",
+            "parameters": [
+                {
+                    "name": "vehicle_id",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "List of devices for vehicle",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "array",
+                                "items": {"$ref": "#/definitions/DeviceResource"},
+                            },
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def get_vehicle_devices(vehicle_id: str) -> tuple[dict[str, Any], int]:
         """
         Get all devices associated with a vehicle.

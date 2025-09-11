@@ -224,6 +224,20 @@ Legacy endpoints without version prefix default to v1.
                     },
                 },
             },
+            "DeviceResource": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Device MAC address"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["devices"],
+                        "description": "Resource type",
+                    },
+                    "attributes": {"$ref": "#/definitions/DeviceAttributes"},
+                    "relationships": {"type": "object"},
+                    "links": {"type": "object"},
+                },
+            },
             "VehicleAttributes": {
                 "type": "object",
                 "required": ["name"],
@@ -243,6 +257,20 @@ Legacy endpoints without version prefix default to v1.
                         "format": "date-time",
                         "description": "Vehicle creation timestamp",
                     },
+                },
+            },
+            "VehicleResource": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Vehicle ID"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["vehicles"],
+                        "description": "Resource type",
+                    },
+                    "attributes": {"$ref": "#/definitions/VehicleAttributes"},
+                    "relationships": {"type": "object"},
+                    "links": {"type": "object"},
                 },
             },
             "ReadingAttributes": {
@@ -282,6 +310,55 @@ Legacy endpoints without version prefix default to v1.
                         "format": "float",
                         "description": "Power in watts",
                     },
+                    "device_type": {"type": "string"},
+                    "vehicle_id": {"type": "string"},
+                },
+            },
+            "ReadingResource": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Reading ID"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["readings"],
+                        "description": "Resource type",
+                    },
+                    "attributes": {"$ref": "#/definitions/ReadingAttributes"},
+                    "links": {"type": "object"},
+                },
+            },
+            "PaginationMeta": {
+                "type": "object",
+                "properties": {
+                    "total": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                    "offset": {"type": "integer"},
+                },
+            },
+            "SystemConfig": {
+                "type": "object",
+                "description": "System configuration attributes",
+                "additionalProperties": True,
+            },
+            "SystemStatus": {
+                "type": "object",
+                "description": "System status attributes",
+                "additionalProperties": True,
+            },
+            "HealthResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "service": {"type": "string"},
+                    "core_running": {"type": "boolean"},
+                },
+            },
+            "VersionResponse": {
+                "type": "object",
+                "properties": {
+                    "api_version": {"type": "string"},
+                    "core_version": {"type": "string"},
+                    "service": {"type": "string"},
                 },
             },
         },

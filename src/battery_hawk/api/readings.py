@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
+from flasgger import swag_from
 from flask import Flask, request
 
 if TYPE_CHECKING:
@@ -211,6 +212,46 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
     """
 
     @app.route("/api/readings/<mac_address>", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Readings"],
+            "summary": "List readings for a device",
+            "parameters": [
+                {
+                    "name": "mac_address",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+                {"name": "limit", "in": "query", "type": "integer", "default": 100},
+                {"name": "offset", "in": "query", "type": "integer", "default": 0},
+                {
+                    "name": "sort",
+                    "in": "query",
+                    "type": "string",
+                    "default": "-timestamp",
+                },
+                {"name": "filter[start_time]", "in": "query", "type": "string"},
+                {"name": "filter[end_time]", "in": "query", "type": "string"},
+            ],
+            "responses": {
+                "200": {
+                    "description": "List of readings",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {
+                                "type": "array",
+                                "items": {"$ref": "#/definitions/ReadingResource"},
+                            },
+                            "meta": {"$ref": "#/definitions/PaginationMeta"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def get_device_readings(mac_address: str) -> tuple[dict[str, Any], int]:
         """
         Get readings for a specific device.
@@ -302,6 +343,32 @@ def setup_readings_routes(app: Flask, core_engine: BatteryHawkCore) -> None:
             return response, 200
 
     @app.route("/api/readings/<mac_address>/latest", methods=["GET"])
+    @swag_from(
+        {
+            "tags": ["Readings"],
+            "summary": "Get the latest reading for a device",
+            "parameters": [
+                {
+                    "name": "mac_address",
+                    "in": "path",
+                    "required": True,
+                    "type": "string",
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "Latest reading",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "data": {"$ref": "#/definitions/ReadingResource"},
+                        },
+                    },
+                },
+                "404": {"$ref": "#/responses/404"},
+            },
+        },
+    )
     def get_latest_reading(mac_address: str) -> tuple[dict[str, Any], int]:
         """
         Get the latest reading for a specific device.
