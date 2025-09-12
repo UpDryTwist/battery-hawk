@@ -330,3 +330,57 @@ async def test_scan_until_new_device(temp_storage: str) -> None:
         assert len(devices) == 2
         assert "AA:BB:CC:DD:EE:01" in devices
         assert "AA:BB:CC:DD:EE:02" in devices
+
+
+@pytest.mark.asyncio
+async def test_discover_passes_adapter_kwarg() -> None:
+    """Ensure BLEDiscoveryService passes adapter kwarg to BleakScanner.discover when configured."""
+
+    class Cfg:
+        def __init__(self) -> None:
+            self.config_dir = "."
+
+        def get_config(self, section: str) -> dict:
+            assert section == "system"
+            return {"bluetooth": {"adapter": "hci1"}}
+
+    async def async_discover(*_args: object, **kwargs: object) -> dict:
+        # Assert adapter is threaded through
+        assert kwargs.get("adapter") == "hci1"
+        return {}
+
+    with patch("src.battery_hawk_driver.base.discovery.BleakScanner") as mock_scanner:
+        mock_scanner.discover = async_discover
+        service = BLEDiscoveryService(Cfg(), disable_storage=True)
+        devices = await service.scan_for_devices(duration=1)
+        assert devices == {}
+
+
+@pytest.mark.asyncio
+async def test_discover_adapter_fallback_on_typeerror() -> None:
+    """If BleakScanner.discover doesn't accept adapter, we should fall back without it."""
+
+    class Cfg:
+        def __init__(self) -> None:
+            self.config_dir = "."
+
+        def get_config(self, section: str) -> dict:
+            assert section == "system"
+            return {"bluetooth": {"adapter": "hci2"}}
+
+    call_log: list[dict] = []
+
+    async def async_discover(*_args: object, **kwargs: object) -> dict:
+        call_log.append(kwargs)
+        if "adapter" in kwargs:
+            raise TypeError("unexpected keyword argument 'adapter'")
+        return {}
+
+    with patch("src.battery_hawk_driver.base.discovery.BleakScanner") as mock_scanner:
+        mock_scanner.discover = async_discover
+        service = BLEDiscoveryService(Cfg(), disable_storage=True)
+        devices = await service.scan_for_devices(duration=1)
+        assert devices == {}
+        # First call attempted with adapter, second without
+        assert any("adapter" in k for k in call_log)
+        assert any("adapter" not in k for k in call_log)

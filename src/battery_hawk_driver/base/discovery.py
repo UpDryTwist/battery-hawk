@@ -39,7 +39,7 @@ class BLEDiscoveryService:
 
     def __init__(
         self,
-        config_manager: object,
+        config_manager: Any,
         storage_path: str | None = None,
         *,
         disable_storage: bool = False,
@@ -53,6 +53,8 @@ class BLEDiscoveryService:
             disable_storage: If True, disable loading from and writing to storage
         """
         self.config = config_manager
+        # type: ignore[reportAttributeAccessIssue] - config is duck-typed
+
         self.discovered_devices: dict[str, dict[str, Any]] = {}
         self.logger = logging.getLogger("battery_hawk.ble_discovery")
         self.storage_path = storage_path or os.path.join(
@@ -60,6 +62,14 @@ class BLEDiscoveryService:
             "discovered_devices.json",
         )
         self.disable_storage = disable_storage
+        # Optional adapter selection from config (e.g., 'hci0')
+        try:
+            self.adapter: str | None = (
+                self.config.get_config("system").get("bluetooth", {}).get("adapter")
+            )
+        except (AttributeError, TypeError, KeyError):
+            # Be resilient to unexpected config shapes or missing get_config
+            self.adapter = None
 
         if not self.disable_storage:
             self._load_persistent_devices()
@@ -121,7 +131,20 @@ class BLEDiscoveryService:
         scan_semaphore = get_ble_scan_semaphore()
         async with scan_semaphore:
             self.logger.debug("Acquired BLE scan semaphore for device discovery")
-            devices = await BleakScanner.discover(timeout=duration, return_adv=True)
+            if getattr(self, "adapter", None):
+                try:
+                    devices = await BleakScanner.discover(
+                        timeout=duration,
+                        return_adv=True,
+                        adapter=self.adapter,  # type: ignore[call-arg]
+                    )
+                except TypeError:
+                    devices = await BleakScanner.discover(
+                        timeout=duration,
+                        return_adv=True,
+                    )
+            else:
+                devices = await BleakScanner.discover(timeout=duration, return_adv=True)
 
         # Log how many items were returned from the scanner
         self.logger.debug(
@@ -194,10 +217,23 @@ class BLEDiscoveryService:
                 self.logger.debug(
                     "Acquired BLE scan semaphore for short discovery scan",
                 )
-                devices = await BleakScanner.discover(
-                    timeout=short_timeout,
-                    return_adv=True,
-                )
+                if getattr(self, "adapter", None):
+                    try:
+                        devices = await BleakScanner.discover(
+                            timeout=short_timeout,
+                            return_adv=True,
+                            adapter=self.adapter,  # type: ignore[call-arg]
+                        )
+                    except TypeError:
+                        devices = await BleakScanner.discover(
+                            timeout=short_timeout,
+                            return_adv=True,
+                        )
+                else:
+                    devices = await BleakScanner.discover(
+                        timeout=short_timeout,
+                        return_adv=True,
+                    )
 
             # Debug counts from this short scan
             self.logger.debug(

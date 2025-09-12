@@ -198,6 +198,14 @@ class BLEConnectionPool:
             "max_concurrent_connections",
             3,
         )
+        # Optional adapter selection (e.g., 'hci0')
+        try:
+            self.adapter: str | None = (
+                self.config.get_config("system").get("bluetooth", {}).get("adapter")
+            )
+        except (AttributeError, TypeError, KeyError):
+            # Be resilient to unexpected config shapes or missing get_config
+            self.adapter = None
         self.active_connections: dict[str, dict] = {}
         self.connection_queue: asyncio.Queue = asyncio.Queue()
         self.connection_history: list[dict] = []
@@ -282,7 +290,7 @@ class BLEConnectionPool:
 
         return await self._create_connection(device_address)
 
-    async def _create_connection(self, device_address: str) -> dict:
+    async def _create_connection(self, device_address: str) -> dict:  # noqa: PLR0915
         """Create actual BLE connection using BleakClient."""
         if not BLEAK_AVAILABLE and not self.test_mode:
             raise BLEConnectionError(
@@ -312,7 +320,25 @@ class BLEConnectionPool:
                         "Bleak library is not available",
                         device_address=device_address,
                     )
-                client = BleakClient(device_address, timeout=self.connection_timeout)
+                # Pass adapter if configured and supported (Linux/BlueZ)
+                if getattr(self, "adapter", None):
+                    try:
+                        client = BleakClient(
+                            device_address,
+                            timeout=self.connection_timeout,
+                            adapter=self.adapter,  # type: ignore[call-arg]
+                        )
+                    except TypeError:
+                        # Fallback for Bleak versions/backends without adapter kwarg
+                        client = BleakClient(
+                            device_address,
+                            timeout=self.connection_timeout,
+                        )
+                else:
+                    client = BleakClient(
+                        device_address,
+                        timeout=self.connection_timeout,
+                    )
 
             # Attempt to connect using semaphore to coordinate BLE scanning
             # This prevents "Operation already in progress" errors when multiple

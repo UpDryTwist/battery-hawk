@@ -150,6 +150,10 @@ sudo hcitool lescan
 # Check Bluetooth service
 sudo systemctl status bluetooth
 
+# Check which adapters BlueZ sees
+hciconfig -a | awk '/^hci/{print $1}'
+
+
 # Check permissions
 groups $USER | grep bluetooth
 ```
@@ -181,6 +185,20 @@ sudo hciconfig hci0 up
 # Restart Bluetooth stack
 sudo systemctl restart bluetooth
 ```
+
+**Multiple Adapters / Selecting Adapter:**
+```bash
+# Temporarily use hci1 for a single run
+battery-hawk device scan --bluetooth-adapter hci1 --duration 10
+
+# Persist selection via environment (Docker or host)
+export BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER=hci1
+
+# Persist in config file via CLI and save to disk
+battery-hawk config set system bluetooth '{"adapter": "hci1"}'
+battery-hawk config save system
+```
+
 
 **Docker Bluetooth Access:**
 ```yaml

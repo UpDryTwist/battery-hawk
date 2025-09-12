@@ -25,6 +25,9 @@ services:
       - BATTERYHAWK_SYSTEM_MQTT_BROKER=localhost
       - BATTERYHAWK_SYSTEM_MQTT_PORT=1883
       - BATTERYHAWK_SYSTEM_MQTT_TOPIC_PREFIX=battery_hawk
+      # Select a specific BlueZ adapter for the container (Linux/BlueZ)
+      - BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER=${BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER:-}
+
     depends_on:
       - influxdb
       - mqtt-broker

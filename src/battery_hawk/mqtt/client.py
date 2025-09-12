@@ -1016,8 +1016,14 @@ class MQTTPublisher:
             payload["vehicle_id"] = vehicle_id
         if device_type:
             payload["device_type"] = device_type
+
+        # Include all extra fields (e.g., acceleration) at top-level without overriding existing keys
         if reading.extra:
+            # Preserve original extra for consumers that expect nested structure
             payload["extra"] = reading.extra
+            for k, v in reading.extra.items():
+                if k not in payload:
+                    payload[k] = v
 
         # Calculate power if voltage and current are available
         if reading.voltage is not None and reading.current is not None:

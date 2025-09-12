@@ -174,6 +174,11 @@ def get_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default=os.environ.get("BATTERYHAWK_CONFIG_DIR", "/data"),
         help="Directory for configuration files (default: /data or $BATTERYHAWK_CONFIG_DIR)",
     )
+    _ = parser.add_argument(
+        "--bluetooth-adapter",
+        type=str,
+        help="Bluetooth adapter to use (e.g., hci0). Overrides config/env for this run",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # show
@@ -3545,6 +3550,23 @@ def main(args: list[str] | None = None) -> int:
     # Initialize ConfigManager with error handling
     try:
         config_manager = ConfigManager(config_dir=opts.config_dir)
+        # Apply CLI override for bluetooth adapter if provided
+        if getattr(opts, "bluetooth_adapter", None):
+            try:
+                system_cfg = config_manager.get_config("system")
+                system_cfg.setdefault("bluetooth", {})["adapter"] = (
+                    opts.bluetooth_adapter
+                )
+                # Do not persist here; this is a runtime override
+                logging.getLogger("battery_hawk.config").info(
+                    "Using Bluetooth adapter override from CLI: %s",
+                    opts.bluetooth_adapter,
+                )
+            except Exception:
+                # Non-fatal if override cannot be applied
+                logging.getLogger("battery_hawk.config").warning(
+                    "Failed to apply bluetooth adapter override",
+                )
         setup_logging(config_manager)
     except Exception as e:
         print(f"Error: Failed to initialize config manager: {e}", file=sys.stderr)  # noqa: T201

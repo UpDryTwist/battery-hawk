@@ -31,7 +31,11 @@ DEFAULTS: dict[str, dict] = {
             "max_bytes": 10485760,  # 10MB
             "backup_count": 5,
         },
-        "bluetooth": {"max_concurrent_connections": 3, "test_mode": False},
+        "bluetooth": {
+            "max_concurrent_connections": 3,
+            "test_mode": False,
+            "adapter": None,
+        },
         "discovery": {
             "initial_scan": True,
             "scan_duration": 10,

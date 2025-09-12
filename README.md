@@ -37,6 +37,8 @@
 - **🤝 [Contributing Guide](CONTRIBUTING.md)**: Development setup and contribution guidelines
 - **⚙️ Configuration Guide**: See [Configuration](#-configuration) section below
 - **🧪 Development Setup**: See [Development](#-development) section below
+- **🔌 Bluetooth Adapter Selection**: See [Adapter Selection](#-adapter-selection)
+
 
 ## 🚀 Quick Start
 
@@ -135,6 +137,8 @@ LOG_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 BLUETOOTH_MAX_CONCURRENT_CONNECTIONS=5
 BLUETOOTH_SCAN_DURATION=10
 
+
+
 # InfluxDB Configuration (optional)
 # NOTE: Org often uses a hyphen, bucket often uses an underscore.
 # Example: ORG=battery-hawk, BUCKET=battery_hawk
@@ -143,6 +147,21 @@ INFLUXDB_URL=http://localhost:8086
 INFLUXDB_TOKEN=your-influxdb-token
 INFLUXDB_ORG=your-org
 INFLUXDB_BUCKET=battery_hawk
+
+
+### 🔌 Adapter Selection
+
+On systems with multiple Bluetooth adapters (e.g., hci0, hci1), you can select which adapter Battery Hawk uses:
+
+```bash
+# Temporarily select adapter for a single run
+battery-hawk device scan --bluetooth-adapter hci1 --duration 10
+
+# Persist via environment (host or container)
+export BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER=hci1
+```
+
+You can also persist this via the configuration system under system.bluetooth.adapter.
 
 # MQTT Configuration (optional)
 MQTT_ENABLED=true
@@ -168,6 +187,7 @@ logging:
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   date_format: "%Y-%m-%d %H:%M:%S"
   file: "/var/log/battery-hawk/battery-hawk.log"
+
   max_bytes: 10485760  # 10MB
   backup_count: 5
 

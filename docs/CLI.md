@@ -19,6 +19,31 @@ battery-hawk --help
 # Set configuration directory (optional)
 export BATTERYHAWK_CONFIG_DIR=/path/to/config
 ```
+```bash
+$ battery-hawk --help | sed -n '1,40p'
+usage: battery-hawk [-h] [--config-dir CONFIG_DIR] [--bluetooth-adapter ADAPTER] {service,device,config,readings,vehicles,data,system} ...
+
+Battery Hawk CLI
+
+options:
+  -h, --help            show this help message and exit
+  --config-dir CONFIG_DIR
+                        Directory for configuration files (default: /data or $BATTERYHAWK_CONFIG_DIR)
+  --bluetooth-adapter ADAPTER
+                        Select Bluetooth adapter (e.g., hci0/hci1). Overrides config/env for this run
+
+commands:
+  {service,device,config,readings,vehicles,data,system}
+                        Command groups
+  service              Manage Battery Hawk services (engine, API, MQTT)
+  device               Manage devices (scan, connect, read)
+  config               View and update configuration
+  readings             Query stored readings
+  vehicles             Manage vehicles
+  data                 Export, import, and cleanup data
+  system               System utilities and diagnostics
+```
+
 
 ### Basic Usage
 
@@ -38,6 +63,7 @@ battery-hawk device --help
 All commands support these global options:
 
 - `--config-dir CONFIG_DIR` - Directory for configuration files (default: /data or $BATTERYHAWK_CONFIG_DIR)
+- `--bluetooth-adapter ADAPTER` - Select Bluetooth adapter (e.g., hci0/hci1). Overrides config/env for this run
 - `--help` - Show help message
 
 ### Output Formats
@@ -143,6 +169,17 @@ battery-hawk device scan --duration 15 --format json
 
 # Scan until new device found
 battery-hawk device scan --scan-until-new --short-timeout 5
+
+# Adapter selection examples
+# Use a specific Bluetooth adapter for this run only
+battery-hawk device scan --bluetooth-adapter hci1 --duration 10
+
+# Persisted config approach (affects future runs)
+# Either via CLI config set:
+battery-hawk config set system bluetooth '{"adapter": "hci1"}' && battery-hawk config save system
+# Or via environment variable for container/host:
+export BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER=hci1
+
 ```
 
 **Options:**
@@ -738,6 +775,8 @@ All CLI commands return appropriate exit codes:
 ### Environment Variables
 
 - `BATTERYHAWK_CONFIG_DIR` - Configuration directory path
+- `BATTERYHAWK_SYSTEM_BLUETOOTH_ADAPTER` - Select Bluetooth adapter (e.g., hci0)
+
 - `LOG_LEVEL` - Override logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 ## 🆘 Getting Help

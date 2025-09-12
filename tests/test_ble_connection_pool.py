@@ -1,9 +1,12 @@
 """Tests for BLEConnectionPool connection management and queuing."""
 
+from __future__ import annotations
+
 import asyncio
 
 import pytest
 
+import src.battery_hawk_driver.base.connection as conn_mod
 from src.battery_hawk_driver.base.connection import BLEConnectionPool
 
 
@@ -141,4 +144,97 @@ async def test_gatt_operations() -> None:
     assert pool.is_connected("AA:BB:CC:DD:EE:99") is False
 
     await pool.disconnect("AA:BB:CC:DD:EE:01")
+    await pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ble_client_receives_adapter_kwarg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure BLEConnectionPool passes adapter to BleakClient when configured."""
+
+    class Cfg:
+        def get_config(self, section: str) -> dict:
+            assert section == "system"
+            return {"bluetooth": {"max_concurrent_connections": 1, "adapter": "hci1"}}
+
+    created_with: dict | None = None
+
+    class DummyClient:
+        def __init__(
+            self,
+            address: str,
+            *,
+            timeout: float,
+            adapter: str | None = None,
+        ) -> None:  # type: ignore[no-untyped-def]
+            nonlocal created_with
+            created_with = {"address": address, "timeout": timeout, "adapter": adapter}
+            self.is_connected = False
+
+        async def connect(self) -> None:
+            self.is_connected = True
+
+        async def disconnect(self) -> None:
+            self.is_connected = False
+
+    # Patch BleakClient in module under test
+
+    monkeypatch.setattr(conn_mod, "BLEAK_AVAILABLE", True)
+    monkeypatch.setattr(conn_mod, "BleakClient", DummyClient)
+
+    pool = BLEConnectionPool(Cfg(), cleanup_interval=0.05, test_mode=False)
+    await pool.connect("AA:BB:CC:DD:EE:AD")
+    assert created_with is not None
+    assert created_with.get("adapter") == "hci1"
+    await pool.disconnect("AA:BB:CC:DD:EE:AD")
+    await pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ble_client_adapter_fallback_on_typeerror(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If BleakClient doesn't accept adapter kwarg, fallback without error."""
+
+    class Cfg:
+        def get_config(self, section: str) -> dict:
+            assert section == "system"
+            return {"bluetooth": {"max_concurrent_connections": 1, "adapter": "hci2"}}
+
+    created_with: dict | None = None
+
+    class DummyClientNoAdapter:
+        def __init__(self, address: str, *, timeout: float) -> None:  # type: ignore[no-untyped-def]
+            nonlocal created_with
+            created_with = {"address": address, "timeout": timeout}
+            self.is_connected = False
+
+        async def connect(self) -> None:
+            self.is_connected = True
+
+        async def disconnect(self) -> None:
+            self.is_connected = False
+
+    # Patch BleakClient in module under test, and simulate TypeError on adapter usage
+    monkeypatch.setattr(conn_mod, "BLEAK_AVAILABLE", True)
+
+    def raising_ctor(
+        address: str,
+        *,
+        timeout: float,
+        adapter: str | None = None,
+    ) -> DummyClientNoAdapter:  # type: ignore[no-untyped-def]
+        if adapter is not None:
+            raise TypeError("unexpected keyword argument 'adapter'")
+        return DummyClientNoAdapter(address, timeout=timeout)
+
+    monkeypatch.setattr(conn_mod, "BleakClient", raising_ctor)
+
+    pool = BLEConnectionPool(Cfg(), cleanup_interval=0.05, test_mode=False)
+    await pool.connect("AA:BB:CC:DD:EE:AF")
+    # Should have fallen back and created client without adapter
+    assert created_with is not None
+    assert "adapter" not in created_with
+    await pool.disconnect("AA:BB:CC:DD:EE:AF")
     await pool.shutdown()

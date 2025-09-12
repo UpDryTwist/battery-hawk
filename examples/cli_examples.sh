@@ -31,6 +31,9 @@ echo "🔍 2. Device Discovery and Management"
 echo "------------------------------------"
 
 # Scan for devices
+# Example: Use a specific Bluetooth adapter just for this scan
+# battery-hawk device scan --bluetooth-adapter hci1 --duration 10
+
 echo "Scanning for BLE devices..."
 battery-hawk device scan --duration 10 --connect --format table
 

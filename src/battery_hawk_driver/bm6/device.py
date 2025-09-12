@@ -601,6 +601,8 @@ class BM6Device(BaseMonitorDevice):
                 cycles = int(cycles_val)
 
         # Create extra data dictionary with BM6-specific fields
+        # Include all parsed values that aren't part of the core BatteryInfo fields
+        # to make sure they are published in both reading and status payloads.
         extra = {}
         for key in [
             "nominal_capacity",
@@ -611,7 +613,12 @@ class BM6Device(BaseMonitorDevice):
             "balance_status",
             "protection_status",
             "software_version",
+            "firmware_version",
             "fet_status",
+            # Motion and state-related fields
+            "state",
+            "rapid_acceleration",
+            "rapid_deceleration",
         ]:
             if key in self._latest_data:
                 extra[key] = self._latest_data[key]
