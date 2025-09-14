@@ -122,6 +122,10 @@ class MQTTService:
                 # Publish initial system status
                 await self._publish_initial_status()
 
+                # Proactively publish retained device statuses for all known devices
+                # so new subscribers can receive a full snapshot immediately.
+                await self._publish_all_device_statuses()
+
             else:
                 self.logger.warning("MQTT service started but not connected")
 
@@ -246,9 +250,60 @@ class MQTTService:
 
             await self.mqtt_publisher.publish_system_status(status_data)
             self.logger.debug("Published initial system status")
-
         except Exception:
             self.logger.exception("Failed to publish initial status")
+
+    async def _publish_all_device_statuses(self) -> None:
+        """
+        Publish retained device statuses for all known devices.
+
+        This republishes each device's current status, embedding the latest
+        reading snapshot when available, ensuring a complete retained snapshot
+        exists for wildcard subscribers.
+        """
+        try:
+            if not self.core_engine:
+                return
+            # Iterate all devices in the registry
+            registry = self.core_engine.device_registry
+            for device in registry.get_all_devices():
+                mac = device.get("mac_address")
+                if not mac:
+                    continue
+                # Build DeviceStatus from persisted runtime status if available
+                status_dict = device.get("device_status") or {}
+                # Fall back to connected flag if present elsewhere
+                connected = status_dict.get("connected")
+                status = DeviceStatus(connected=bool(connected))
+                # Attach optional fields if present
+                for key in (
+                    "error_code",
+                    "error_message",
+                    "protocol_version",
+                    "last_command",
+                    "extra",
+                ):
+                    if key in status_dict and status_dict[key] is not None:
+                        setattr(
+                            status,
+                            key if key != "extra" else "extra",
+                            status_dict[key],
+                        )
+                # Latest reading snapshot (dict or BatteryInfo-like)
+                latest_reading = device.get("latest_reading")
+                await self.mqtt_publisher.publish_device_status(
+                    device_id=mac,
+                    status=status,
+                    device_type=device.get("device_type"),
+                    vehicle_id=device.get("vehicle_id"),
+                    reading=latest_reading,
+                )
+            self.logger.debug(
+                "Published retained status for %d devices",
+                len(registry.get_all_devices()),
+            )
+        except Exception:
+            self.logger.exception("Failed to publish all device statuses")
 
     async def _periodic_status_publisher(self) -> None:
         """Periodically publish system status."""
