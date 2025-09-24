@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     dbus \
     systemd \
     systemd-sysv \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid "${GROUP_ID}" "${GROUP}" && \
